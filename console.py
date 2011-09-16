@@ -17,10 +17,10 @@ class Console:
         self.__start = 0
         self.__cursor = 0
         self.__width = 80
+        # TODO: calculate width using termios and renew it using SIGWINCH
         self.__history = []
         self.__current = [x for x in self.__history] + [self.__line]
         self.__position = len(self.__history)
-        # TODO: calculate width using termios and renew it using SIGWINCH
         self.__input = None
 
     def __enter( self ):
@@ -74,6 +74,8 @@ class Console:
         print('\r\033[K>' + start + visual + finish + ('\033[%dD' % move if move != 0 else ''), end='')
 
     def add( self, text ):
+        if self.state is Console.LOCK:
+            return
         for key in text:
             # TODO: setup keys for different terminals
             if self.__input is not None:
@@ -259,9 +261,14 @@ def handle_parser():
         if 'Log' in packet:
             console.write(packet['Log'] + '\n')
         if 'Message' in packet:
-            console.write(packet['Message'] + '\n')
+            if packet['Message'] is not None:
+                message = packet['Message']
+                if message[-1] != '\n': message += '\n'
+                console.write(message)
+            else:
+                console.write('\033[31;1mERROR: “Message” field exists in packet but is None.\033[0m\n')
         if 'Chat' in packet:
-            console.write('\e[1m' + packet['Chat'] + '\e[0m\n')
+            console.write('\033[1m' + packet['Chat'] + '\033[0m\n')
         if 'ID' in packet:
             if console.state is Console.LOCK and console.value == packet['ID']:
                 console.unlock('... press any key ...')
@@ -273,12 +280,16 @@ count = 0
 while True:
     queue = []
     # console.write("[debug] ready to poll\n", force=True)
-    for handle, events in poll.poll():
-        # console.write("[debug] poll: handle=%d, event_mask=%d (IN=%d,OUT=%d,ERR=%d)\n" % (handle, events, select.EPOLLIN, select.EPOLLOUT, select.EPOLLERR), force=True)
-        if handle in action:
-            queue.append((action[handle], (handle, events)))
-        else:
-            console.write("ERROR: cannot handle %d\n" % handle, force=True)
+    try:
+        for handle, events in poll.poll():
+            # console.write("[debug] poll: handle=%d, event_mask=%d (IN=%d,OUT=%d,ERR=%d)\n" % (handle, events, select.EPOLLIN, select.EPOLLOUT, select.EPOLLERR), force=True)
+            if handle in action:
+               queue.append((action[handle], (handle, events)))
+            else:
+                console.write("ERROR: cannot handle %d\n" % handle, force=True)
+    except IOError as e:
+        console.write("ERROR: " + e)
+        queue.append((reconnect, ()))
     for f, p in queue:
         # console.write("[debug] next action\n")
         if isinstance(p, tuple):
