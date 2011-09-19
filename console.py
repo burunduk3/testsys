@@ -216,32 +216,40 @@ def reconnect():
     console.lock("*** reconnecting ***", packet_id + "_2")
     reconnect_id += 1
     del action[s.fileno()]
-    poll.unregister(s)
-    s.close()
-    time.sleep(1)
-    s = socket.socket()
-    poll.register(s, select.EPOLLIN)
-    action[s.fileno()] = handle_socket
-    console.write("", force=True)
-    s.connect((host, port))
-    s.send(Packet({'Password': key, 'Command': "ver", 'ID': packet_id + "_0"})())
-    if args.msglevel is not None:
-        s.send(Packet({'Command': "msg_level " + args.msglevel, 'ID': packet_id + "_1"})())
-    if args.name is not None:
-        s.send(Packet({'Command': "name " + args.name, 'ID': packet_id + "_2"})())
+    try:
+        poll.unregister(s)
+        s.close()
+        time.sleep(1)
+        s = socket.socket()
+        poll.register(s, select.EPOLLIN)
+        action[s.fileno()] = handle_socket
+        console.write("", force=True)
+        s.connect((host, port))
+        s.send(Packet({'Password': key, 'Command': "ver", 'ID': packet_id + "_0"})())
+        if args.msglevel is not None:
+            s.send(Packet({'Command': "msg_level " + args.msglevel, 'ID': packet_id + "_1"})())
+        if args.name is not None:
+            s.send(Packet({'Command': "name " + args.name, 'ID': packet_id + "_2"})())
+    except IOError as e:
+        console.write("\033[31;1mexception while reconnecting: " + str(e) + "\033[0m\n")
+        queue.append((reconnect, ()))
 
 def handle_socket( handle, events ):
     if events & select.EPOLLIN:
         events &= ~select.EPOLLIN
-        parser.add(s.recv(4096, socket.MSG_DONTWAIT))
-        queue.append((handle_parser, ()))
+        try:
+            parser.add(s.recv(4096, socket.MSG_DONTWAIT))
+            queue.append((handle_parser, ()))
+        except IOError as e:
+            console.write("\033[31;1mlost connection to testsys: recv: " + str(e) + "\033[0m\n", force=True)
+            queue.append((reconnect, ()))
     if events & select.EPOLLERR:
         events &= ~select.EPOLLERR
-        console.write("\033[31;1mlost connection to testsys (err)\033[0m\n", force=True)
+        console.write("\033[31;1mlost connection to testsys: err\033[0m\n", force=True)
         queue.append((reconnect, ()))
     if events & select.EPOLLHUP:
         events &= ~select.EPOLLHUP
-        console.write("\033[31;1mlost connection to testsys (hup)\033[0m\n", force=True)
+        console.write("\033[31;1mlost connection to testsys: hup\033[0m\n", force=True)
         queue.append((reconnect, ()))
     if events != 0:
         console.write("ERROR: cannot handle event %d (h=%d)\n" % (events, handle), force=True)
@@ -284,11 +292,11 @@ while True:
         for handle, events in poll.poll():
             # console.write("[debug] poll: handle=%d, event_mask=%d (IN=%d,OUT=%d,ERR=%d)\n" % (handle, events, select.EPOLLIN, select.EPOLLOUT, select.EPOLLERR), force=True)
             if handle in action:
-               queue.append((action[handle], (handle, events)))
+                queue.append((action[handle], (handle, events)))
             else:
                 console.write("ERROR: cannot handle %d\n" % handle, force=True)
     except IOError as e:
-        console.write("ERROR: " + e)
+        console.write("\033[31;1mERROR: " + str(e) + "\033[0m\n")
         queue.append((reconnect, ()))
     for f, p in queue:
         # console.write("[debug] next action\n")
