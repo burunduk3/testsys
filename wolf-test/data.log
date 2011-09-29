@@ -1,2 +1,4 @@
-1317207693 wolf
-1317302422	team.add	burunduk3	Олег\PДавыдов	xsitenerist
+1317207693      wolf
+1317302422	team.add	"burunduk3"	"Олег\PДавыдов"	"xsitenerist"
+1317328431	team.add	"valich"	""	"12345"
+1317337189	compiler.add	"x86.c.gcc"	"${name%.c}"	"gcc\P-O2\P-o\P$binary\P-x\Pc\P$name"	"./$binary"
