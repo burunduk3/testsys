@@ -100,7 +100,7 @@ if args.unix is not None:
     poll.add_listener(s, cb_unix)
 s = lib_socket.socket(lib_socket.AF_INET, lib_socket.SOCK_STREAM)
 s.setsockopt(lib_socket.SOL_SOCKET, lib_socket.SO_LINGER, struct.pack('II', 1, 0))
-s.bind(('', int(args.port)))
+s.bind(('127.0.0.1', int(args.port)))
 s.listen(100)
 poll.add_listener(s, cb_main)
 
@@ -197,6 +197,7 @@ print("readed %d bytes from event log" % size)
 log_event = open(args.data + '.log', 'a')
 assert size == log_event.tell()
 
+sys.stdout.flush()
 while True:
     queue = poll() # Вместе вырвем себе мозг?
     for action, arguments in queue:
