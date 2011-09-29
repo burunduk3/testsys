@@ -58,14 +58,18 @@ def cb_unix( socket, peer ):
     socket.close()
     return []
 def cb_conn_create( socket ):
+    def result( data ):
+        socket.send((json.dumps(data) + '\n').encode("utf-8"))
+        return []
     def handle_packet( data ):
         try:
             data = json.loads(data.decode("utf-8"))
         except ValueError as error:
             print("ERROR while decoding packet:", error)
+            return result(False)
         print('packet received: %s' % data)
-        socket.send((json.dumps({'result': 'error', 'description': 'under contruction (feature not implemented)'}) + '\n').encode("utf-8"))
-        return []
+        # socket.send((json.dumps({'result': 'error', 'description': 'under contruction (feature not implemented)'}) + '\n').encode("utf-8"))
+        return result(False)
     tail = b''
     def cb_conn( data ):
         nonlocal tail
