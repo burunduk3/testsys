@@ -53,11 +53,12 @@ class Poll:
                 print("ERROR: cannot handle %d" % handle, file=sys.stderr)
         return queue
 
+
 def cb_unix( socket, peer ):
     print("new unix connection (handle = %d, remote = %s)" % (socket.fileno(), str(peer)))
     socket.close()
     return []
-def cb_conn_create( socket ):
+def cb_conn_create( socket, actions ):
     def result( data ):
         socket.send((json.dumps(data) + '\n').encode("utf-8"))
         return []
@@ -67,13 +68,16 @@ def cb_conn_create( socket ):
         except ValueError as error:
             print("ERROR while decoding packet:", error)
             return result(False)
-        print('packet received: %s' % data)
-        # socket.send((json.dumps({'result': 'error', 'description': 'under contruction (feature not implemented)'}) + '\n').encode("utf-8"))
-        return result(False)
+        if not isinstance(data, dict) or 'action' not in data:
+            return result(False)
+        return result(False if data['action'] not in actions else actions[data['action']](data));
     tail = b''
     def cb_conn( data ):
+        if len(data) == 0:
+            poll.remove(socket.fileno())
+            socket.close()
+            return []
         nonlocal tail
-        # print("data received: %d bytes: %s" % (len(data), ''.join(['.' if x < 32 or x >= 127 else chr(x) for x in data])))
         data = data.split(b'\n')
         tail += data[0]
         queue = []
@@ -84,7 +88,8 @@ def cb_conn_create( socket ):
     return cb_conn
 def cb_main( socket, peer ):
     print("new main connection (handle = %d, remote = %s)" % (socket.fileno(), str(peer)))
-    poll.add_peer(socket, cb_conn_create(socket))
+    global actions
+    poll.add_peer(socket, cb_conn_create(socket, actions))
     return []
 
 poll = Poll()
@@ -99,13 +104,94 @@ s.bind(('', int(args.port)))
 s.listen(100)
 poll.add_listener(s, cb_main)
 
+class Team:
+    def __init__( self, login, name, password ):
+        self.login, self.name, self.password = login, name, password
+
+class Wolf:
+    def __init__( self, timestamp ):
+        self.__timestamp = timestamp
+        self.__teams = {}
+    def replayers( self ):
+        return {
+            'team.add': self.replay_team_add
+        }
+    def replay_team_add( self, timestamp, parameters ):
+        login, name, password = parameters
+        self.__teams[login] = Team(login, name, password)
+    def team_get( self, login ):
+        return self.__teams[login] if login in self.__teams else None
+
+def replay_wolf( timestamp, parameters ):
+    global wolf, replayers
+    wolf = Wolf(timestamp)
+    replayers = wolf.replayers()
+def levpar_decode( s ):
+    f = False
+    for ch in s:
+        if f:
+            yield chr(ord(ch) - 48)
+            f = False
+        elif ch == '\\':
+            f = True
+        else:
+            yield ch
+def levpar_encode( s ):
+    for ch in s:
+        if ord(ch) > 32:
+            yield ch
+        else:
+            yield '\\'
+            yield chr(ord(ch) + 48)
+def replay_logevent( line ):
+    global replayers
+    data = line.split()
+    timestamp, event = data[0:2]
+    if event not in replayers:
+        print("FATAL: cannot replay event %s (no such event)" % event)
+        sys.exit(1)
+    print("replay log event: %s" % str(data))
+    replayers[event](timestamp, [''.join(levpar_decode(x)) for x in data[2:]])
+def create_logevent( event, parameters ):
+    line = [str(int(time.time())), event] + [''.join(levpar_encode(x)) for x in parameters]
+    line = '\t'.join(line)
+    print(line, file=log_event)
+    log_event.flush()
+    replay_logevent(line)
+
+def action_create( parameters, continuation ):
+    def action( data ):
+        for x in parameters:
+            if x not in data:
+               return False
+        return continuation(*[data[x] for x in parameters])
+    return action
+def action_team_add( login, name, password ):
+    if wolf.team_get(login) is not None:
+        return False
+    create_logevent("team.add", [login, name, password])
+    return True
+def action_team_login( login, password ):
+    team = wolf.team_get(login)
+    return team is not None and team.login == login and team.password == password
+
+actions = {
+    'ping': lambda data: True,
+    'team.add': action_create(['login', 'name', 'password'], action_team_add),
+    'team.login': action_create(['login', 'password'], action_team_login)
+}
+replayers = {
+    'wolf': replay_wolf
+}
+wolf = None
+
 log_index = open(args.data + '.bin', 'r+b')
 size = log_index.seek(0, io.SEEK_END)
 print(("opened index log (" + args.data + '.bin' + "), size: %d bytes") % size)
 
 with open(args.data + '.log', 'r') as log_event:
     for line in log_event.readlines():
-        print("replay log line: %s" % line)
+        replay_logevent(line)
     size = log_event.tell()
 print("readed %d bytes from event log" % size)
 log_event = open(args.data + '.log', 'a')
@@ -114,9 +200,5 @@ assert size == log_event.tell()
 while True:
     queue = poll() # Вместе вырвем себе мозг?
     for action, arguments in queue:
-        # print("queue call: action =", action, 'arguments =', arguments)
-        # r = action(*arguments)
-        # print("r =", r)
-        # queue.extend(r)
         queue.extend(action(*arguments))
 
