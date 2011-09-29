@@ -138,7 +138,7 @@ def levpar_decode( s ):
             yield ch
 def levpar_encode( s ):
     for ch in s:
-        if ord(ch) > 32 && ch != '\\':
+        if ord(ch) > 32 and ch != '\\':
             yield ch
         else:
             yield '\\'
