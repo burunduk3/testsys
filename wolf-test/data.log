@@ -2,3 +2,6 @@
 1317302422	team.add	"burunduk3"	"Олег\PДавыдов"	"xsitenerist"
 1317328431	team.add	"valich"	""	"12345"
 1317337189	compiler.add	"x86.c.gcc"	"${name%.c}"	"gcc\P-O2\P-o\P$binary\P-x\Pc\P$name"	"./$binary"
+1317363295	problem.create	"0"	"sum"	"A\P+\PB"
+1317363331	problem.create	"1"	"sum"	"A\P+\PB"
+1317365712	problem.checker.set	"1"	"check.c"	"0+30"	"x86.c.gcc"

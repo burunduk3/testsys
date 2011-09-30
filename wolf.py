@@ -63,6 +63,21 @@ s.listen(100)
 poll.add_listener(s, cb_main)
 
 
+def json_binary_decode( data ):
+    data = data.encode("ascii").split(b'@')
+    result = data[0]
+    for x in data[1:]:
+        result += bytes([int(x[0:2], 16)]) + x[2:]
+    return result
+def json_binary_encode( data ):
+    result = ''
+    for x in data:
+        if 32 <= x <= 126 and x != ord('@'):
+            result += chr(x)
+        else:
+            result += "@%02x" % x
+    return result
+
 def replay_wolf( timestamp, parameters ):
     global wolf, data
     wolf = core.Wolf(timestamp)
@@ -94,6 +109,26 @@ def action_compiler_remove( id ):
     data.create("compiler.remove", id)
     return True
 
+def action_problem_checker_set( id, name, source, compiler ):
+    if id < 0 or id >= wolf.problem_count():
+        return False
+    if wolf.compiler_get(compiler) is None:
+        return False
+    source = data.save(json_binary_decode(source))
+    data.create("problem.checker.set", [id, name, source, compiler])
+    return True
+def action_problem_checker_source( id ):
+    if id < 0 or id >= wolf.problem_count():
+        return False
+    checker = wolf.problem_get(id).checker
+    if checker is None:
+        return None
+    return json_binary_encode(data.load(checker.source))
+def action_problem_create( name, full ):
+    id = wolf.problem_count()
+    data.create("problem.create", [id, name, full])
+    return id
+
 def action_team_add( login, name, password ):
     if wolf.team_get(login) is not None:
         return False
@@ -114,6 +149,10 @@ actions = {
     'compiler.info': action_create(['id'], action_compiler_info),
     'compiler.list': action_create([], action_compiler_list),
     'compiler.remove': action_create(['id'], action_compiler_remove),
+    # 'problem.checker.default'
+    'problem.checker.set': action_create(["id", "name", "source", "compiler"], action_problem_checker_set),
+    'problem.checker.source': action_create(["id"], action_problem_checker_source),
+    'problem.create': action_create(['name', 'full'], action_problem_create),
     'team.add': action_create(['login', 'name', 'password'], action_team_add),
     'team.info': action_create(['login'], action_team_info),
     'team.login': action_create(['login', 'password'], action_team_login)
