@@ -5,9 +5,12 @@ import argparse, io, json, select, socket, struct, sys
 from dts.protocol import Packet, PacketParser
 from wolf import core, data, poll
 from wolf.common import log
+from wolf.queue import Queue
+from wolf.judge import Judge
 
-parser = argparse.ArgumentParser(description="Arctic Wolf: contest management system")
-parser.add_argument('--port', '-p', action='store', dest='port', required=True, help='Default port to listen')
+parser = argparse.ArgumentParser(description="Arctic Wolf: contest management system.")
+parser.add_argument('--port', '-p', action='store', dest='port', required=True, help='Default port to listen.')
+parser.add_argument('--judge-port', action='store', dest='judge_port', default=17239, help='Port to listen connections from judges.')
 parser.add_argument('-u', action='store', dest='unix', help='Unix socket for command console (not used by default).')
 parser.add_argument('data', metavar='<data>', help='Prefix for data files.')
 args = parser.parse_args()
@@ -49,6 +52,19 @@ def cb_main( socket, peer ):
     global actions
     poll.add_peer(socket, cb_conn_create(socket, actions))
     return []
+def cb_judge_create( socket ):
+    parser = PacketParser(binary=True)
+    judge = Judge(socket, judge_ready)
+    def cb_judge( data ):
+        # log("new data from judge: %s" % str(data))
+        parser.add(data)
+        # parser.dump(log)
+        return [(judge.receive, [x]) for x in parser()]
+    return cb_judge
+def cb_judge( socket, peer ):
+    log("new judge connection (handle = %d, remote = %s)" % (socket.fileno(), str(peer)))
+    poll.add_peer(socket, cb_judge_create(socket))
+    return []
 
 poll = poll.Poll()
 if args.unix is not None:
@@ -56,11 +72,18 @@ if args.unix is not None:
     s.bind(args.unix)
     s.listen(3)
     poll.add_listener(s, cb_unix)
+
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack('II', 1, 0))
 s.bind(('127.0.0.1', int(args.port)))
 s.listen(100)
 poll.add_listener(s, cb_main)
+
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+s.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack('II', 1, 0))
+s.bind(('', int(args.judge_port)))
+s.listen(100)
+poll.add_listener(s, cb_judge)
 
 
 def json_binary_decode( data ):
@@ -77,11 +100,6 @@ def json_binary_encode( data ):
         else:
             result += "@%02x" % x
     return result
-
-def replay_wolf( timestamp, parameters ):
-    global wolf, data
-    wolf = core.Wolf(timestamp)
-    data.replayers = wolf.replayers()
 
 def action_create( parameters, continuation ):
     def action( data ):
@@ -106,7 +124,7 @@ def action_compiler_list():
 def action_compiler_remove( id ):
     if wolf.compiler_get(id) is None:
         return False
-    data.create("compiler.remove", id)
+    data.create("compiler.remove", [id])
     return True
 
 def action_problem_checker_set( id, name, source, compiler ):
@@ -157,10 +175,110 @@ actions = {
     'team.info': action_create(['login'], action_team_info),
     'team.login': action_create(['login', 'password'], action_team_login)
 }
+
+def magic_parse( s, v ):
+    result = ''
+    variable = ''
+    cutting = ''
+    def mp_normal( x ):
+        nonlocal result
+        if x == '$':
+            return mp_variable_start
+        else:
+            result += x
+            return mp_normal
+    def mp_variable_start( x ):
+        nonlocal variable
+        variable = ''
+        if x == '{':
+            return mp_complex
+        else:
+            return mp_variable(x)
+    def mp_variable( x ):
+        nonlocal variable, result
+        if 'a' <= x <= 'z' or 'A' <= x <= 'Z' or '0' <= x <= '9' or x == '_':
+            variable += x
+            return mp_variable
+        else:
+            result += v[variable]
+            return mp_normal(x)
+    def mp_complex( x ):
+        nonlocal variable
+        if 'a' <= x <= 'z' or 'A' <= x <= 'Z' or '0' <= x <= '9' or x == '_':
+            variable += x
+            return mp_complex
+        else:
+            variable = v[variable]
+            return mp_modify(x)
+    def mp_modify( x ):
+        nonlocal result, variable, cutting
+        if x == '}':
+            result += variable
+            return mp_normal
+        elif x == '%':
+            cutting = ''
+            return mp_cutend
+        else:
+            return mp_modify
+    def mp_cutend( x ):
+        nonlocal variable, cutting
+        if x in {'}', '%', '#'}:
+            if variable.endswith(cutting):
+                variable = variable[:-len(cutting)]
+            return mp_modify(x)
+        else:
+            cutting += x
+            return mp_cutend
+
+    state = mp_normal
+    for x in s:
+        state = state(x)
+    if state is mp_variable:
+        result += v[variable]
+    return result
+
+def judge_ready( judge ):
+    result = [] if free_judges or not judge_queue else [(judge_check_queue, ())]
+    free_judges.push(judge)
+    return result
+def judge_check_queue():
+    result = []
+    while free_judges and judge_queue:
+        judge = free_judges.pop()
+        action, parameters = judge_queue.pop()
+        result.extend(action(judge, *parameters))
+    return result
+def judge_compile_checker( judge, id ):
+    problem = wolf.problem_get(id)
+    checker = problem.checker
+    assert checker is not None
+    compiler = wolf.compiler_get(checker.compiler)
+    assert compiler is not None
+    binary_name = magic_parse(compiler.binary, {'name': checker.name})
+    command = magic_parse(compiler.compile, {'name': checker.name, 'binary': binary_name})
+    log("time to compile checker! (problem #%d, name=%s, binary=%s)" % (id, checker.name, binary_name))
+    log("  command: %s" % command)
+    source = data.load(checker.source)
+    def cb_ok( binary, output ):
+        log("compile successful, size = %d, output = \n%s" % (len(binary), output.decode('iso8859-1')))
+        return []
+    def cb_fail():
+        return []
+    judge.compile(command, checker.name, checker.source, source, cb_ok, cb_fail)
+    return []
+def replay_wolf( timestamp, parameters ):
+    global wolf, data
+    wolf = core.Wolf(timestamp, judge_queue, judge_compile_checker)
+    data.replayers = wolf.replayers()
+
 replayers = {
     'wolf': replay_wolf
 }
+
 wolf = None
+
+free_judges = Queue()
+judge_queue = Queue()
 
 data = data.Data(replayers, args.data + '.bin', args.data + ".log")
 data.start()

@@ -27,7 +27,10 @@ class Data:
             log("FATAL: cannot replay event \"%s\" (no such event)" % event)
             sys.exit(1)
         log("replay log event: %s" % str(data))
-        self.replayers[event](timestamp, [None if x == '-' else ''.join(self.__decode(x[1:-1])) for x in data[2:]])
+        data = data[2:]
+        if not isinstance(data, list):
+           data = [data]
+        self.replayers[event](timestamp, [None if x == '-' else ''.join(self.__decode(x[1:-1])) for x in data])
 
     def create( self, event, parameters ):
         line = [str(int(time.time())), event] + ['-' if x is None else '"' + ''.join(self.__encode(str(x))) + '"' for x in parameters]

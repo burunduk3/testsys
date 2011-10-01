@@ -1,3 +1,4 @@
+from .common import log
 
 class Problem:
     def __init__( self, name, full ):
@@ -17,11 +18,13 @@ class Team:
         self.login, self.name, self.password = login, name, password
 
 class Wolf:
-    def __init__( self, timestamp ):
+    def __init__( self, timestamp, judge_queue, problem_checker_compile ):
         self.__timestamp = timestamp
+        self.__queue = judge_queue
         self.__compilers = {}
         self.__problems = []
         self.__teams = {}
+        self.__problem_checker_compile = problem_checker_compile
 
     def replayers( self ):
         return {
@@ -36,12 +39,13 @@ class Wolf:
         id, binary, compile, run = parameters
         self.__compilers[id] = Compiler(id, binary, compile, run)
     def replay_compiler_remove( self, timestamp, parameters ):
+        id = parameters[0]
         del self.__compilers[id]
     def replay_problem_checker_set( self, timestamp, parameters ):
         id, name, source, compiler = parameters
         id = int(id)
         self.__problems[id].checker = Checker(name, source, compiler)
-        # todo: compile checker now
+        self.__queue.push((self.__problem_checker_compile, [id]))
     def replay_problem_create( self, timestamp, parameters ):
         id, name, full = parameters
         assert len(self.__problems) == int(id)

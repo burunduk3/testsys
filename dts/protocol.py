@@ -6,17 +6,19 @@ class Packet:
     def __call__( self ):
         return b'\0---\0' + b'\0'.join([self.__encode(key) + b'=' + self.__encode(self.__data[key]) for key in sorted(self.__data)]) + b'\0+++\0'
     def __encode( self, data ):
-        return b''.join([bytes([x]) if x >= 0x20 else bytes([0x18, x ^ 0x40]) for x in data.encode(config.encoding)])
+        if not isinstance(data, bytes):
+            data = data.encode(config.encoding)
+        return b''.join([bytes([x]) if x >= 0x20 else bytes([0x18, x ^ 0x40]) for x in data])
 
 class PacketParser:
-    def __init__( self ):
+    def __init__( self, binary = False ):
+        self.__binary = binary
         self.__queue = []
         self.__state = self.__error() # easiest way to reset DFA
 
     def __dfa_magic_create( self, index ):
         magic = b'\0---\0'
         def __dfa_magic( key ):
-            # print("[debug] dfa_magic(index = %d, key = %c %d)" % (index, key if key >= 0x20 else '.', key))
             if magic[index] != key:
                 return self.__error()
             if index + 1 == len(magic):
@@ -26,9 +28,11 @@ class PacketParser:
 
     def __dfa_bv_create( self, fv, fx ):
         def __dfa_bv( key ):
-            # print("[debug] dfa_bv(fv = %s, fx = %s, key = %c %d)" % (str(fv), str(fx), key if key >= 0x20 else '.', key))
             if key == 0 and not fx:
-                self.__data[self.__key.decode(config.encoding)] = self.__value.decode(config.encoding) if self.__value is not None else None
+                if self.__binary:
+                    self.__data[self.__key] = self.__value if self.__value is not None else None
+                else:
+                    self.__data[self.__key.decode(config.encoding)] = self.__value.decode(config.encoding) if self.__value is not None else None
                 self.__key = b''
                 self.__value = None
                 return self.__dfa_exit_create(1)
@@ -37,7 +41,8 @@ class PacketParser:
                 return self.__dfa_bv_create(fv, True)
             if fx:
                 key ^= 0x40
-                if key >= 0x20: return self.__error()
+                if key >= 0x20 and key != 0x7f:
+                    return self.__error()
             if key == ord('=') and not fv:
                 self.__value = b''
                 return self.__dfa_bv_create(True, False)
@@ -51,7 +56,6 @@ class PacketParser:
     def __dfa_exit_create( self, index ):
         exit = b'\0+++\0'
         def __dfa_exit( key ):
-            # print("[debug] dfa_exit(index = %d, key = %c %d)" % (index, key if key >= 0x20 else '.', key))
             if exit[index] != key:
                 if index == 1:
                     self.__key += bytes([key])
