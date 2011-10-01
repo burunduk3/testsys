@@ -9,3 +9,4 @@
 1317411456	compiler.add	"win32.c.gcc"	"${name%.c}.exe"	"gcc\P-O2\P-o\P$binary\P-x\Pc"	"./$binary"
 1317479042	problem.checker.compiled	"1"	"30+17197"	"17227+50"
 1317480834	problem.test.add	"1"	"17277+4"	"17281+2"
+1317484062	problem.limits.set	"1"	"0.1"	"1048576"

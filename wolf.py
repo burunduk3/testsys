@@ -127,6 +127,11 @@ def action_problem_create( name, full ):
     id = wolf.problem_count()
     data.create("problem.create", [id, name, full])
     return id
+def action_problem_limits_set( id, time, memory ):
+    if id < 0 or id >= wolf.problem_count():
+        return False
+    data.create("problem.limits.set", [id, time, memory])
+    return True
 def action_problem_test_add( id, test, answer ):
     if id < 0 or id >= wolf.problem_count():
         return False
@@ -163,7 +168,7 @@ actions = {
     'problem.checker.set': action_create(["id", "name", "source", "compiler"], action_problem_checker_set),
     'problem.checker.source': action_create(["id"], action_problem_checker_source),
     'problem.create': action_create(['name', 'full'], action_problem_create),
-    # 'problem.limis.set':
+    'problem.limits.set': action_create(['id', 'time', 'memory'], action_problem_limits_set),
     'problem.test.add': action_create(['id', 'test', 'answer'], action_problem_test_add),
     'problem.test.count': action_create(['id'], action_problem_test_count),
     #'problem.test.insert':

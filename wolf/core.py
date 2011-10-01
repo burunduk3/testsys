@@ -5,6 +5,8 @@ class Problem:
         self.name, self.full = name, full
         self.checker = None
         self.tests = []
+        self.time_limit = None
+        self.memory_limit = None
 
 class Checker:
     def __init__( self, name, source, compiler ):
@@ -35,6 +37,7 @@ class Wolf:
             'problem.checker.set': self.replay_problem_checker_set,
             'problem.checker.compiled': self.replay_problem_checker_compiled,
             'problem.create': self.replay_problem_create,
+            'problem.limits.set': self.replay_problem_limits_set,
             'problem.test.add': self.replay_problem_test_add,
             'team.add': self.replay_team_add
         }
@@ -59,6 +62,11 @@ class Wolf:
         id, name, full = parameters
         assert len(self.__problems) == int(id)
         self.__problems.append(Problem(name, full))
+    def replay_problem_limits_set( self, timestamp, parameters ):
+        id, time, memory = parameters
+        id, time, memory = int(id), float(time), int(memory)
+        self.__problems[id].time_limit = time
+        self.__problems[id].memory_limit = memory
     def replay_problem_test_add( self, timestamp, parameters ):
         id, test, answer = parameters
         id = int(id)
