@@ -4,10 +4,12 @@ class Problem:
     def __init__( self, name, full ):
         self.name, self.full = name, full
         self.checker = None
+        self.tests = []
 
 class Checker:
     def __init__( self, name, source, compiler ):
         self.name, self.source, self.compiler = name, source, compiler
+        self.binary = None
 
 class Compiler:
     def __init__( self, id, binary, compile, run ):
@@ -31,7 +33,9 @@ class Wolf:
             'compiler.add': self.replay_compiler_add,
             'compiler.remove': self.replay_compiler_remove,
             'problem.checker.set': self.replay_problem_checker_set,
+            'problem.checker.compiled': self.replay_problem_checker_compiled,
             'problem.create': self.replay_problem_create,
+            'problem.test.add': self.replay_problem_test_add,
             'team.add': self.replay_team_add
         }
 
@@ -46,10 +50,19 @@ class Wolf:
         id = int(id)
         self.__problems[id].checker = Checker(name, source, compiler)
         self.__queue.push((self.__problem_checker_compile, [id]))
+    def replay_problem_checker_compiled( self, timestamp, parameters ):
+        id, binary, output = parameters
+        id = int(id)
+        assert self.__problems[id].checker is not None
+        self.__problems[id].checker.binary = binary
     def replay_problem_create( self, timestamp, parameters ):
         id, name, full = parameters
         assert len(self.__problems) == int(id)
         self.__problems.append(Problem(name, full))
+    def replay_problem_test_add( self, timestamp, parameters ):
+        id, test, answer = parameters
+        id = int(id)
+        self.__problems[id].tests.append((test, answer))
     def replay_team_add( self, timestamp, parameters ):
         login, name, password = parameters
         self.__teams[login] = Team(login, name, password)

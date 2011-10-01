@@ -15,7 +15,7 @@ class Data:
             for line in events.readlines():
                 self.__replay(line)
             size = events.tell()
-        log("read %d bytes from event log" % size)
+        log("read %d bytes from event log (%s)" % (size, self.__logfile))
 
         self.__log = open(self.__logfile, 'a')
         assert size == self.__log.tell()

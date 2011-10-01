@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import argparse, io, json, select, socket, struct, sys
+import argparse, base64, io, json, select, socket, struct, sys
 
 from dts.protocol import Packet, PacketParser
 from wolf import core, data, poll
@@ -48,7 +48,6 @@ def cb_conn_create( socket, actions ):
         return queue
     return cb_conn
 def cb_main( socket, peer ):
-    log("new main connection (handle = %d, remote = %s)" % (socket.fileno(), str(peer)))
     global actions
     poll.add_peer(socket, cb_conn_create(socket, actions))
     return []
@@ -56,13 +55,10 @@ def cb_judge_create( socket ):
     parser = PacketParser(binary=True)
     judge = Judge(socket, judge_ready)
     def cb_judge( data ):
-        # log("new data from judge: %s" % str(data))
         parser.add(data)
-        # parser.dump(log)
         return [(judge.receive, [x]) for x in parser()]
     return cb_judge
 def cb_judge( socket, peer ):
-    log("new judge connection (handle = %d, remote = %s)" % (socket.fileno(), str(peer)))
     poll.add_peer(socket, cb_judge_create(socket))
     return []
 
@@ -85,21 +81,6 @@ s.bind(('', int(args.judge_port)))
 s.listen(100)
 poll.add_listener(s, cb_judge)
 
-
-def json_binary_decode( data ):
-    data = data.encode("ascii").split(b'@')
-    result = data[0]
-    for x in data[1:]:
-        result += bytes([int(x[0:2], 16)]) + x[2:]
-    return result
-def json_binary_encode( data ):
-    result = ''
-    for x in data:
-        if 32 <= x <= 126 and x != ord('@'):
-            result += chr(x)
-        else:
-            result += "@%02x" % x
-    return result
 
 def action_create( parameters, continuation ):
     def action( data ):
@@ -132,7 +113,7 @@ def action_problem_checker_set( id, name, source, compiler ):
         return False
     if wolf.compiler_get(compiler) is None:
         return False
-    source = data.save(json_binary_decode(source))
+    source = data.save(base64.b64decode(source.encode('ascii')))
     data.create("problem.checker.set", [id, name, source, compiler])
     return True
 def action_problem_checker_source( id ):
@@ -141,11 +122,22 @@ def action_problem_checker_source( id ):
     checker = wolf.problem_get(id).checker
     if checker is None:
         return None
-    return json_binary_encode(data.load(checker.source))
+    return base64.b64encode(data.load(checker.source)).decode('ascii')
 def action_problem_create( name, full ):
     id = wolf.problem_count()
     data.create("problem.create", [id, name, full])
     return id
+def action_problem_test_add( id, test, answer ):
+    if id < 0 or id >= wolf.problem_count():
+        return False
+    test = data.save(base64.b64decode(test.encode('ascii')))
+    answer = data.save(base64.b64decode(answer.encode('ascii')))
+    data.create('problem.test.add', [id, test, answer])
+    return True
+def action_problem_test_count( id ):
+    if id < 0 or id >= wolf.problem_count():
+        return False
+    return len(wolf.problem_get(id).tests)
 
 def action_team_add( login, name, password ):
     if wolf.team_get(login) is not None:
@@ -167,10 +159,15 @@ actions = {
     'compiler.info': action_create(['id'], action_compiler_info),
     'compiler.list': action_create([], action_compiler_list),
     'compiler.remove': action_create(['id'], action_compiler_remove),
-    # 'problem.checker.default'
+    # 'problem.checker.default':
     'problem.checker.set': action_create(["id", "name", "source", "compiler"], action_problem_checker_set),
     'problem.checker.source': action_create(["id"], action_problem_checker_source),
     'problem.create': action_create(['name', 'full'], action_problem_create),
+    # 'problem.limis.set':
+    'problem.test.add': action_create(['id', 'test', 'answer'], action_problem_test_add),
+    'problem.test.count': action_create(['id'], action_problem_test_count),
+    #'problem.test.insert':
+    #'problem.test.remove':
     'team.add': action_create(['login', 'name', 'password'], action_team_add),
     'team.info': action_create(['login'], action_team_info),
     'team.login': action_create(['login', 'password'], action_team_login)
@@ -237,6 +234,10 @@ def magic_parse( s, v ):
         result += v[variable]
     return result
 
+def problem_add( message ):
+    log("ERROR: %s" % message)
+    problems.push(message)
+    return []
 def judge_ready( judge ):
     result = [] if free_judges or not judge_queue else [(judge_check_queue, ())]
     free_judges.push(judge)
@@ -252,7 +253,11 @@ def judge_compile_checker( judge, id ):
     problem = wolf.problem_get(id)
     checker = problem.checker
     assert checker is not None
+    if problem.checker.binary is not None:
+        return []
     compiler = wolf.compiler_get(checker.compiler)
+    if compiler is None:
+        return problem_add("failed to compile checker for problem #%d" % id)
     assert compiler is not None
     binary_name = magic_parse(compiler.binary, {'name': checker.name})
     command = magic_parse(compiler.compile, {'name': checker.name, 'binary': binary_name})
@@ -261,9 +266,12 @@ def judge_compile_checker( judge, id ):
     source = data.load(checker.source)
     def cb_ok( binary, output ):
         log("compile successful, size = %d, output = \n%s" % (len(binary), output.decode('iso8859-1')))
+        binary = data.save(binary)
+        output = data.save(output)
+        data.create("problem.checker.compiled", [id, binary, output])
         return []
     def cb_fail():
-        return []
+        return problem_add("failed to compile checker for problem #%d" % id)
     judge.compile(command, checker.name, checker.source, source, cb_ok, cb_fail)
     return []
 def replay_wolf( timestamp, parameters ):
@@ -278,6 +286,7 @@ replayers = {
 wolf = None
 
 free_judges = Queue()
+problems = Queue()
 judge_queue = Queue()
 
 data = data.Data(replayers, args.data + '.bin', args.data + ".log")

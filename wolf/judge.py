@@ -19,6 +19,7 @@ class Judge:
             # todo: check password
             self.__state = Judge.READY
             self.__name = packet[b'Name'].decode('utf8')
+            log("new judge registered in system: %s" % self.__name)
             return self.__ready(self)
         elif self.__state is Judge.COMPILE:
             if b'Status' not in packet:
