@@ -113,8 +113,8 @@ def action_problem_checker_set( id, name, source, compiler ):
         return False
     if wolf.compiler_get(compiler) is None:
         return False
-    source = data.save(base64.b64decode(source.encode('ascii')))
-    data.create("problem.checker.set", [id, name, source, compiler])
+    source = data.save(base64.b64decode(source.encode('ascii')), name)
+    data.create("problem.checker.set", [id, source, compiler])
     return True
 def action_problem_checker_source( id ):
     if id < 0 or id >= wolf.problem_count():
@@ -143,6 +143,16 @@ def action_problem_test_count( id ):
     if id < 0 or id >= wolf.problem_count():
         return False
     return len(wolf.problem_get(id).tests)
+
+def action_submit( problem, name, source, compiler ):
+    if problem < 0 or problem >= wolf.problem_count():
+        return False
+    if wolf.compiler_get(compiler) is None:
+        return False
+    source = data.save(base64.b64decode(source.encode('ascii')), name)
+    id = wolf.submit_count()
+    data.create('submit', [id, problem, source, compiler])
+    return id
 
 def action_team_add( login, name, password ):
     if wolf.team_get(login) is not None:
@@ -173,6 +183,7 @@ actions = {
     'problem.test.count': action_create(['id'], action_problem_test_count),
     #'problem.test.insert':
     #'problem.test.remove':
+    'submit': action_create(['problem', 'name', 'source', 'compiler'], action_submit),
     'team.add': action_create(['login', 'name', 'password'], action_team_add),
     'team.info': action_create(['login'], action_team_info),
     'team.login': action_create(['login', 'password'], action_team_login)
@@ -239,10 +250,10 @@ def magic_parse( s, v ):
         result += v[variable]
     return result
 
-def problem_add( message ):
+def problem_add( judge, message ):
     log("ERROR: %s" % message)
     problems.push(message)
-    return []
+    return [(judge_ready, [judge])]
 def judge_ready( judge ):
     result = [] if free_judges or not judge_queue else [(judge_check_queue, ())]
     free_judges.push(judge)
@@ -259,29 +270,80 @@ def judge_compile_checker( judge, id ):
     checker = problem.checker
     assert checker is not None
     if problem.checker.binary is not None:
-        return []
+        return [(judge_ready, [judge])]
     compiler = wolf.compiler_get(checker.compiler)
     if compiler is None:
         return problem_add("failed to compile checker for problem #%d" % id)
-    assert compiler is not None
-    binary_name = magic_parse(compiler.binary, {'name': checker.name})
-    command = magic_parse(compiler.compile, {'name': checker.name, 'binary': binary_name})
-    log("time to compile checker! (problem #%d, name=%s, binary=%s)" % (id, checker.name, binary_name))
-    log("  command: %s" % command)
-    source = data.load(checker.source)
-    def cb_ok( binary, output ):
-        log("compile successful, size = %d, output = \n%s" % (len(binary), output.decode('iso8859-1')))
-        binary = data.save(binary)
-        output = data.save(output)
-        data.create("problem.checker.compiled", [id, binary, output])
-        return []
-    def cb_fail():
-        return problem_add("failed to compile checker for problem #%d" % id)
-    judge.compile(command, checker.name, checker.source, source, cb_ok, cb_fail)
+    source = wolf.content_get(checker.source)
+    binary_name = magic_parse(compiler.binary, {'name': source.name})
+    command = magic_parse(compiler.compile, {'name': source.name, 'binary': binary_name})
+    log("[re]compile checker for problem #%d (%s → %s)" % (id, source.name, binary_name))
+    def callback( result, binary, output ):
+        if result is Judge.OK:
+            log("compile successful, size = %d, output = \n%s" % (len(binary), output.decode('iso8859-1')))
+            binary = data.save(binary, binary_name)
+            output = data.save(output)
+            data.create("problem.checker.compiled", [id, binary, output])
+            return []
+        else:
+            return problem_add("failed to compile checker for problem #%d" % id)
+    judge.compile(command, source, callback)
     return []
+def judge_submit_test( judge, id ):
+    submit = wolf.submit_get(id)
+    if submit.result is not None:
+        return [(judge_ready, [judge])]
+    problem = wolf.problem_get(submit.problem)
+    if problem is None or problem.checker is None or problem.checker.binary is None:
+        # todo: move submit into queue if problem is not ready
+        return problem_add("failed to test submit #%d: no such problem #%d" % (id, submit.problem))
+    compiler = wolf.compiler_get(submit.compiler)
+    if compiler is None:
+        return problem_add("failed to compile submit #%d: compiler not exists: %s" % (id, submit.compiler))
+    if submit.binary is None:
+        source = wolf.content_get(submit.source)
+        binary_name = magic_parse(compiler.binary, {'name': source.name})
+        command = magic_parse(compiler.compile, {'name': source.name, 'binary': binary_name})
+        def callback( result, binary, output ):
+            if result is Judge.OK:
+                log("submit #%d compiled, size = %d, output:\n%s" % (id, len(binary), output.decode('iso8859-1')))
+                binary = data.save(binary, binary_name)
+                output = data.save(output)
+                data.create('submit.compiled', [id, binary, output])
+                return []
+            else:
+                log("failed to compile submit #%d" % id)
+                return []
+        judge.compile(command, source, callback)
+        return []
+    if submit.test < len(submit.tests):
+        test = submit.tests[submit.test]
+        binary = wolf.content_get(submit.binary)
+        data_test = wolf.content_get(test.test)
+        data_answer = wolf.content_get(test.answer)
+        checker = wolf.content_get(problem.checker.binary)
+        def callback( status, maxtime, maxmemory):
+            log("submit #%d result on test #%d: %s" % (id, submit.test, Judge.status_str[status]))
+            maxtime = int(maxtime)
+            maxmemory = int(maxmemory)
+            data.create('submit.test', [id, submit.test, Judge.status_str[status], maxtime, maxmemory])
+            return []
+        # todo: input file, output file
+        judge.test(
+            binary=binary,
+            test=data_test,
+            answer=data_answer,
+            time_limit=problem.time_limit,
+            memory_limit=problem.memory_limit,
+            checker=checker,
+            callback = callback
+        )
+        return []
+    submit.result = True
+    return [(judge_ready, [judge])]
 def replay_wolf( timestamp, parameters ):
     global wolf, data
-    wolf = core.Wolf(timestamp, judge_queue, judge_compile_checker)
+    wolf = core.Wolf(timestamp, judge_queue, judge_compile_checker, judge_submit_test, data)
     data.replayers = wolf.replayers()
 
 replayers = {

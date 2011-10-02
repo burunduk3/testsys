@@ -1,4 +1,4 @@
-import io, sys, time
+import hashlib, io, sys, time
 from .common import log
 
 class Data:
@@ -30,7 +30,7 @@ class Data:
         data = data[2:]
         if not isinstance(data, list):
            data = [data]
-        self.replayers[event](timestamp, [None if x == '-' else ''.join(self.__decode(x[1:-1])) for x in data])
+        self.replayers[event](int(timestamp), [None if x == '-' else ''.join(self.__decode(x[1:-1])) for x in data])
 
     def create( self, event, parameters ):
         line = [str(int(time.time())), event] + ['-' if x is None else '"' + ''.join(self.__encode(str(x))) + '"' for x in parameters]
@@ -39,17 +39,21 @@ class Data:
         self.__log.flush()
         self.__replay(line)
 
-    def save( self, content ):
+    def save( self, content, name=None ):
         assert isinstance(content, bytes)
-        r = "%d+%d" % (self.__bin.tell(), len(content))
+        hash = hashlib.md5(content).hexdigest()
+        if name is None: name = hash
+        start = self.__bin.tell()
+        size = len(content)
         self.__bin.write(content)
         self.__bin.flush()
-        return r
+        self.create('content', [hash, name, start, size])
+        return hash
 
-    def load( self, pointer ):
-        offset, size = [int(x) for x in pointer.split('+')]
-        assert size >= 0 and offset >= 0 and offset + size <= self.__bin.tell()
-        self.__bin.seek(offset)
+    def load( self, start, size ):
+        assert isinstance(start, int) and isinstance(size, int)
+        assert size >= 0 and start >= 0 and start + size <= self.__bin.tell()
+        self.__bin.seek(start)
         r = self.__bin.read(size)
         self.__bin.seek(0, io.SEEK_END)
         return r
