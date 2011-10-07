@@ -17,7 +17,7 @@ class Judge:
     def __authorize( self, packet ):
         del self.__response[None]
         if b'Password' not in packet or b'Name' not in packet:
-            log("disconnecting judge (bad authorizetion)")
+            log("disconnecting judge (bad authorization)")
             # todo: disconnect
             return []
         # todo: check password
@@ -36,9 +36,10 @@ class Judge:
             if status not in self.__status:
                 log("ERROR: unknown judge status: %s" % status)
                 log("full packet: %s" % str(packet))
+                # todo: disconnect
                 return []
             return [
-                (self.__ready, [self]),
+                (self.__ready, (self,)),
                 (callback, [self.__status[status]] + [
                    (f if f is not None else lambda x: x)(packet.get(k, d)) for k, d, f in parameters
                 ])
@@ -52,7 +53,7 @@ class Judge:
         ])
     def __tested( self, callback ):
         return self.__normal(callback, [
-            (b'MaxTime', None, lambda x: 0.0000001 * int(x)), # testsys judge returns time in 1/10⁷ seconds
+            (b'MaxTime', None, lambda x: 1e-7 * int(x)), # testsys judge returns time in 1/10⁷ seconds
             (b'MaxMemory', None, None)
         ])
 

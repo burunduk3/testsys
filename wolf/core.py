@@ -42,16 +42,14 @@ class Test:
         self.status, self.time_peak, self.memory_peak = status, time_peak, memory_peak
 
 class Wolf:
-    def __init__( self, timestamp, judge_queue, problem_checker_compile, submit_test, data ):
+    def __init__( self, timestamp, shedulers, data ):
         self.__timestamp = timestamp
-        self.__queue = judge_queue
+        self.__shedulers = shedulers
         self.__compilers = {}
         self.__content = {}
         self.__problems = []
         self.__submits = []
         self.__teams = {}
-        self.__problem_checker_compile = problem_checker_compile
-        self.__submit_test = submit_test
         self.__data = data
 
     def replayers( self ):
@@ -85,7 +83,7 @@ class Wolf:
         id, source, compiler = parameters
         id = int(id)
         self.__problems[id].checker = Checker(source, compiler)
-        self.__queue.push((self.__problem_checker_compile, [id]))
+        self.__shedulers['checker_compile'](id)
     def replay_problem_checker_compiled( self, timestamp, parameters ):
         id, binary, output = parameters
         id = int(id)
@@ -111,13 +109,13 @@ class Wolf:
         submit = Submit(problem, source, compiler)
         submit.tests = [Test(*x) for x in self.__problems[problem].tests]
         self.__submits.append(submit)
-        self.__queue.push((self.__submit_test, [int(id)]))
+        self.__shedulers['solution_compile'](int(id))
     def replay_submit_compiled( self, timestamp, parameters ):
         id, binary, output = parameters
         id = int(id)
         self.__submits[id].binary = binary
         self.__submits[id].test = 0
-        self.__queue.push((self.__submit_test, [int(id)]))
+        self.__shedulers['solution_test'](int(id), 0)
     def replay_submit_test( self, timestamp, parameters ):
         id, test, status, time_peak, memory_peak = parameters
         id = int(id)
@@ -126,8 +124,10 @@ class Wolf:
         memory_peak = float(memory_peak)
         assert self.__submits[id].test == test
         self.__submits[id].tests[test].result(status, time_peak, memory_peak)
-        self.__submits[id].test += 1
-        self.__queue.push((self.__submit_test, [int(id)]))
+        if test < len(self.__submits[id].tests) - 1:
+            self.__shedulers['solution_test'](int(id), test + 1)
+        else:
+            self.__submits[id].result = True
     def replay_team_add( self, timestamp, parameters ):
         login, name, password = parameters
         self.__teams[login] = Team(login, name, password)

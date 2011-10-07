@@ -1,6 +1,11 @@
-import sys
+import sys, time
 
-def log( message ):
-    print(message)
-    sys.stdout.flush()
+class Log:
+    def __init__( self ):
+        pass
+    def __call__( self, message ):
+        print(time.strftime("[%Y-%m-%d %H:%M:%S]"), message)
+        sys.stdout.flush()
+
+log = Log()
 

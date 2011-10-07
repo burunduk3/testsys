@@ -3,10 +3,11 @@
 import argparse, base64, io, json, select, socket, struct, sys
 
 from dts.protocol import Packet, PacketParser
-from wolf import core, data, poll
+from wolf import core, data, network
 from wolf.common import log
 from wolf.queue import Queue
 from wolf.judge import Judge
+from wolf.magic import magic_parse
 
 parser = argparse.ArgumentParser(description="Arctic Wolf: contest management system.")
 parser.add_argument('--port', '-p', action='store', dest='port', required=True, help='Default port to listen.')
@@ -19,7 +20,10 @@ def cb_unix( socket, peer ):
     log("new unix connection (handle = %d, remote = %s)" % (socket.fileno(), str(peer)))
     socket.close()
     return []
-def cb_conn_create( socket, actions ):
+
+def cb_main( peer, socket, init ):
+    global actions
+    log("INFO: peer %s connected" % str(peer))
     def result( data ):
         socket.send((json.dumps(data) + '\n').encode("utf-8"))
         return []
@@ -31,38 +35,40 @@ def cb_conn_create( socket, actions ):
             return result(False)
         if not isinstance(data, dict) or 'action' not in data:
             return result(False)
-        return result(False if data['action'] not in actions else actions[data['action']](data));
+        return result(actions.get(data['action'], lambda data: False)(data))
+        # False if data['action'] not in actions else actions[data['action']](data));
     tail = b''
-    def cb_conn( data ):
+    def cb_data( data ):
         if len(data) == 0:
-            poll.remove(socket.fileno())
-            socket.close()
-            return []
+            log("INFO: abnormal disconnecting peer %s" % str(peer))
+            socket.disconnect()
+            return
         nonlocal tail
         data = data.split(b'\n')
         tail += data[0]
-        queue = []
         for x in data[1:]:
-            queue.append((handle_packet, [tail]))
+            yield (handle_packet, (tail,))
             tail = x
-        return queue
-    return cb_conn
-def cb_main( socket, peer ):
-    global actions
-    poll.add_peer(socket, cb_conn_create(socket, actions))
-    return []
-def cb_judge_create( socket ):
+    def cb_halt():
+        log("INFO: peer %s disconnected" % str(peer))
+        socket.disconnect()
+        return []
+    return init(cb_data, cb_halt)
+
+def cb_judge( peer, socket, init ):
     parser = PacketParser(binary=True)
     judge = Judge(socket, judge_ready)
-    def cb_judge( data ):
+    def cb_data( data ):
         parser.add(data)
         return [(judge.receive, [x]) for x in parser()]
-    return cb_judge
-def cb_judge( socket, peer ):
-    poll.add_peer(socket, cb_judge_create(socket))
-    return []
+    def cb_halt():
+        log("INFO: judge peer %s disconnected" % str(peer))
+        # todo: shutdown judge and restart its active actions
+        socket.disconnect()
+        return []
+    return init(cb_data, cb_halt)
 
-poll = poll.Poll()
+poll = network.Poll()
 if args.unix is not None:
     s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     s.bind(args.unix)
@@ -189,91 +195,37 @@ actions = {
     'team.login': action_create(['login', 'password'], action_team_login)
 }
 
-def magic_parse( s, v ):
-    result = ''
-    variable = ''
-    cutting = ''
-    def mp_normal( x ):
-        nonlocal result
-        if x == '$':
-            return mp_variable_start
-        else:
-            result += x
-            return mp_normal
-    def mp_variable_start( x ):
-        nonlocal variable
-        variable = ''
-        if x == '{':
-            return mp_complex
-        else:
-            return mp_variable(x)
-    def mp_variable( x ):
-        nonlocal variable, result
-        if 'a' <= x <= 'z' or 'A' <= x <= 'Z' or '0' <= x <= '9' or x == '_':
-            variable += x
-            return mp_variable
-        else:
-            result += v[variable]
-            return mp_normal(x)
-    def mp_complex( x ):
-        nonlocal variable
-        if 'a' <= x <= 'z' or 'A' <= x <= 'Z' or '0' <= x <= '9' or x == '_':
-            variable += x
-            return mp_complex
-        else:
-            variable = v[variable]
-            return mp_modify(x)
-    def mp_modify( x ):
-        nonlocal result, variable, cutting
-        if x == '}':
-            result += variable
-            return mp_normal
-        elif x == '%':
-            cutting = ''
-            return mp_cutend
-        else:
-            return mp_modify
-    def mp_cutend( x ):
-        nonlocal variable, cutting
-        if x in {'}', '%', '#'}:
-            if variable.endswith(cutting):
-                variable = variable[:-len(cutting)]
-            return mp_modify(x)
-        else:
-            cutting += x
-            return mp_cutend
-
-    state = mp_normal
-    for x in s:
-        state = state(x)
-    if state is mp_variable:
-        result += v[variable]
-    return result
-
 def problem_add( judge, message ):
     log("ERROR: %s" % message)
     problems.push(message)
-    return [(judge_ready, [judge])]
+
 def judge_ready( judge ):
     result = [] if free_judges or not judge_queue else [(judge_check_queue, ())]
     free_judges.push(judge)
     return result
+
 def judge_check_queue():
-    result = []
     while free_judges and judge_queue:
-        judge = free_judges.pop()
         action, parameters = judge_queue.pop()
-        result.extend(action(judge, *parameters))
-    return result
-def judge_compile_checker( judge, id ):
+        action(*parameters)
+    return []
+
+def action_checker_compile( id ):
     problem = wolf.problem_get(id)
     checker = problem.checker
-    assert checker is not None
-    if problem.checker.binary is not None:
-        return [(judge_ready, [judge])]
+    if checker is None:
+        return problem_add("tried to compile undefined checker for problem #%d" % id)
+    if checker.binary is not None:
+        return
     compiler = wolf.compiler_get(checker.compiler)
     if compiler is None:
-        return problem_add("failed to compile checker for problem #%d" % id)
+        # todo: add actions into list of bad compilers
+        return problem_add("compiler %s doesn't exist, needed for checker in problem #%d" % (checker.compiler, id))
+    problem.checker.binary = False
+    judge = judge_get()
+    if judge is None:
+        judge_queue.push((action_checker_compile, (id,)))
+        return
     source = wolf.content_get(checker.source)
     binary_name = magic_parse(compiler.binary, {'name': source.name})
     command = magic_parse(compiler.compile, {'name': source.name, 'binary': binary_name})
@@ -286,64 +238,80 @@ def judge_compile_checker( judge, id ):
             data.create("problem.checker.compiled", [id, binary, output])
             return []
         else:
-            return problem_add("failed to compile checker for problem #%d" % id)
+            log("failed to compile checker for problem #%d:\n%s" % (id, output.decode('iso8859-1')))
+            return []
     judge.compile(command, source, callback)
-    return []
-def judge_submit_test( judge, id ):
+
+def action_submit_compile( id ):
     submit = wolf.submit_get(id)
-    if submit.result is not None:
-        return [(judge_ready, [judge])]
+    if submit.binary is not None:
+        log("WARNING: tried to compile already compiled submission #%d" % id)
+        return
     problem = wolf.problem_get(submit.problem)
     if problem is None or problem.checker is None or problem.checker.binary is None:
         # todo: move submit into queue if problem is not ready
-        return problem_add("failed to test submit #%d: no such problem #%d" % (id, submit.problem))
+        return problem_add("failed to test submit #%d: problem #%d doesn't exists or isn't ready" % (id, submit.problem))
     compiler = wolf.compiler_get(submit.compiler)
     if compiler is None:
         return problem_add("failed to compile submit #%d: compiler not exists: %s" % (id, submit.compiler))
-    if submit.binary is None:
-        source = wolf.content_get(submit.source)
-        binary_name = magic_parse(compiler.binary, {'name': source.name})
-        command = magic_parse(compiler.compile, {'name': source.name, 'binary': binary_name})
-        def callback( result, binary, output ):
-            if result is Judge.OK:
-                log("submit #%d compiled, size = %d, output:\n%s" % (id, len(binary), output.decode('iso8859-1')))
-                binary = data.save(binary, binary_name)
-                output = data.save(output)
-                data.create('submit.compiled', [id, binary, output])
-                return []
-            else:
-                log("failed to compile submit #%d" % id)
-                return []
-        judge.compile(command, source, callback)
+    judge = judge_get()
+    if judge is None:
+        judge_queue.push((action_submit_compile, (id,)))
+        return
+    source = wolf.content_get(submit.source)
+    binary_name = magic_parse(compiler.binary, {'name': source.name})
+    command = magic_parse(compiler.compile, {'name': source.name, 'binary': binary_name})
+    def callback( result, binary, output ):
+        if result is Judge.OK:
+            log("submit #%d compiled, size = %d, output:\n%s" % (id, len(binary), output.decode('iso8859-1')))
+            binary = data.save(binary, binary_name)
+            output = data.save(output)
+            data.create('submit.compiled', [id, binary, output])
+        elif result is Judge.CE:
+            log("submit #%d: compilation error, output:\n%s" % (id, output.decode('iso8859-1')))
+            # todo: add this into database
+        else:
+            problem_add("failed to compile submit #%d" % id)
         return []
-    if submit.test < len(submit.tests):
-        test = submit.tests[submit.test]
-        binary = wolf.content_get(submit.binary)
-        data_test = wolf.content_get(test.test)
-        data_answer = wolf.content_get(test.answer)
-        checker = wolf.content_get(problem.checker.binary)
-        def callback( status, maxtime, maxmemory):
-            log("submit #%d result on test #%d: %s" % (id, submit.test, Judge.status_str[status]))
-            maxtime = int(maxtime)
-            maxmemory = int(maxmemory)
-            data.create('submit.test', [id, submit.test, Judge.status_str[status], maxtime, maxmemory])
-            return []
-        # todo: input file, output file
-        judge.test(
-            binary=binary,
-            test=data_test,
-            answer=data_answer,
-            time_limit=problem.time_limit,
-            memory_limit=problem.memory_limit,
-            checker=checker,
-            callback = callback
-        )
+    judge.compile(command, source, callback)
+
+def action_submit_test( id, test ):
+    submit = wolf.submit_get(id)
+    if submit.result is not None:
+        log("WARNING: tried to test already judged submission #%d (test %d)" % (id, test))
+        return
+    assert 0 <= test < len(submit.tests)
+    judge = judge_get()
+    if judge is None:
+        judge_queue.push((action_submit_test, (id, test)))
+        return
+    test = submit.tests[test]
+    binary = wolf.content_get(submit.binary)
+    data_test = wolf.content_get(test.test)
+    data_answer = wolf.content_get(test.answer)
+    checker = wolf.content_get(problem.checker.binary)
+    def callback( status, maxtime, maxmemory):
+        log("submit #%d result on test #%d: %s" % (id, submit.test, Judge.status_str[status]))
+        maxtime = int(maxtime)
+        maxmemory = int(maxmemory)
+        data.create('submit.test', [id, submit.test, Judge.status_str[status], maxtime, maxmemory])
         return []
-    submit.result = True
-    return [(judge_ready, [judge])]
+    # todo: input file, output file
+    judge.test(
+        binary=binary,
+        test=data_test,
+        answer=data_answer,
+        time_limit=problem.time_limit,
+        memory_limit=problem.memory_limit,
+        checker=checker,
+        callback = callback
+    )
+
+judge_get = lambda: free_judges.pop() if free_judges else None
+
 def replay_wolf( timestamp, parameters ):
     global wolf, data
-    wolf = core.Wolf(timestamp, judge_queue, judge_compile_checker, judge_submit_test, data)
+    wolf = core.Wolf(timestamp, shedulers, data)
     data.replayers = wolf.replayers()
 
 replayers = {
@@ -353,14 +321,26 @@ replayers = {
 wolf = None
 
 free_judges = Queue()
-problems = Queue()
 judge_queue = Queue()
+
+actions = Queue()
+
+problems = Queue()
+
+shedulers = {
+    'checker_compile': lambda id: actions.push((action_checker_compile, (id,))),
+    'solution_compile': lambda id: actions.push((action_submit_compile, (id,))),
+    'solution_test': lambda id, test: actions.push((action_submit_test, (id, test)))
+}
 
 data = data.Data(replayers, args.data + '.bin', args.data + ".log")
 data.start()
 
 sys.stdout.flush()
 while True:
+    while actions:
+        action, arguments = actions.pop()
+        action(*arguments)
     queue = poll() # Вместе вырвем себе мозг?
     for action, arguments in queue:
         queue.extend(action(*arguments))
