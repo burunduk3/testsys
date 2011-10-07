@@ -51,9 +51,14 @@ class Wolf:
         self.__submits = []
         self.__teams = {}
         self.__data = data
+        self.__archive = set()
+        self.__archive_list = []
 
     def replayers( self ):
         return {
+            'archive.add': self.replay_archive_add,
+            # 'archive.remove': self.replay_archive_remove,
+            'archive.submit': self.replay_archive_submit,
             'compiler.add': self.replay_compiler_add,
             'compiler.remove': self.replay_compiler_remove,
             'content': self.replay_content,
@@ -68,6 +73,21 @@ class Wolf:
             'team.add': self.replay_team_add
         }
 
+    def replay_archive_add( self, timestamp, parameters ):
+        problem_id = int(*parameters)
+        assert problem_id not in self.__archive and 0 <= problem_id < len(self.__problems)
+        self.__archive.add(problem_id)
+        self.__archive_list.add(problem_id)
+    def replay_archive_submit( self, timestamp, parameters ):
+        id, team, problem,  source, compiler = parameters
+        assert len(self.__submits) == int(id)
+        problem = int(problem)
+        assert problem in self.__archive
+        submit = Submit(problem, source, compiler)
+        submit.tests = [Test(*x) for x in self.__problems[problem].tests]
+        submit.source = (None, int(team))
+        self.__submits.append(submit)
+        self.__shedulers['solution_compile'](int(id))
     def replay_compiler_add( self, timestamp, parameters ):
         id, binary, compile, run = parameters
         self.__compilers[id] = Compiler(id, binary, compile, run)
@@ -132,6 +152,8 @@ class Wolf:
         login, name, password = parameters
         self.__teams[login] = Team(login, name, password)
 
+    def archive_get():
+        return self.__archive_list
     def compiler_get( self, id ):
         return self.__compilers.get(id)
     def compiler_list( self ):

@@ -96,6 +96,19 @@ def action_create( parameters, continuation ):
         return continuation(*[data[x] for x in parameters])
     return action
 
+def action_archive_add( problem ):
+    if not isinstance(problem, int) or \
+       not 0 <= problem < wolf.problem_count() or \
+       problem in wolf.archive_get():
+           # todo: optimize long check
+           return False
+    data.create('archive.add', [problem])
+    return len(wolf.archive_get())
+def action_archive_count():
+    return len(wolf.archive_count())
+def action_archive_list( start, limit ):
+    return wolf.archive_get()[start:start + limit]
+
 def action_compiler_add( id, binary, compile, run ):
     if wolf.compiler_get(id) is not None:
         return False
@@ -176,6 +189,9 @@ def action_team_info( login ):
 
 actions = {
     'ping': lambda data: True,
+    'archive.add': action_create(['problem'], action_archive_add),
+    'archive.count': action_create([], action_archive_count),
+    'archive.list': action_create(['start', 'limit'], action_archive_list),
     'compiler.add': action_create(['id', 'binary', 'compile', 'run'], action_compiler_add),
     'compiler.info': action_create(['id'], action_compiler_info),
     'compiler.list': action_create([], action_compiler_list),
