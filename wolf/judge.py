@@ -53,8 +53,8 @@ class Judge:
         ])
     def __tested( self, callback ):
         return self.__normal(callback, [
-            (b'MaxTime', None, lambda x: 1e-7 * int(x)), # testsys judge returns time in 1/10⁷ seconds
-            (b'MaxMemory', None, None)
+            (b'MaxTime', '0', lambda x: 1e-7 * int(x)), # testsys judge returns time in 1/10⁷ seconds
+            (b'MaxMemory', '0', lambda x: int(x))
         ])
 
     def receive( self, packet ):
@@ -78,7 +78,7 @@ class Judge:
             # b'BinaryName': binary_name.encode('utf-8') # not supported by judge
         })())
 
-    def test( self, *, binary, test, answer, input='stdin', output='stdout', time_limit, memory_limit, checker, callback ):
+    def test( self, *, binary, test, answer, input, output, time_limit, memory_limit, checker, callback ):
         def query( files ):
             id = ('id_%08d' % self.__message_id).encode('ascii')
             self.__message_id += 1
@@ -94,8 +94,8 @@ class Judge:
                 b'ExeFile': path(binary),
                 b'TestPath': path(test),
                 b'AnswerPath': path(answer),
-                b'InputName': input,
-                b'OutputName': output,
+                b'InputName': input if input is not None else 'stdin',
+                b'OutputName': output if input is not None else 'stdout',
                 b'TimeLimit': ('%d' % int(1000 * time_limit)).encode('utf-8'),
                 b'MemoryLimit': ('%d' % memory_limit).encode('utf-8'),
                 b'CheckerPath': path(checker)

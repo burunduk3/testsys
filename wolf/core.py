@@ -23,6 +23,8 @@ class Problem:
         self.tests = []
         self.time_limit = None
         self.memory_limit = None
+        self.input = None
+        self.output = None
 
 class Submit:
     def __init__( self, problem, source, compiler ):
@@ -65,6 +67,7 @@ class Wolf:
             'problem.checker.set': self.replay_problem_checker_set,
             'problem.checker.compiled': self.replay_problem_checker_compiled,
             'problem.create': self.replay_problem_create,
+            'problem.files.set': self.replay_problem_files_set,
             'problem.limits.set': self.replay_problem_limits_set,
             'problem.test.add': self.replay_problem_test_add,
             'submit': self.replay_submit,
@@ -113,6 +116,11 @@ class Wolf:
         id, name, full = parameters
         assert len(self.__problems) == int(id)
         self.__problems.append(Problem(name, full))
+    def replay_problem_files_set( self, timestamp, parameters ):
+        id, input, output = parameters
+        id = int(id)
+        self.__problems[id].input = input
+        self.__problems[id].output = output
     def replay_problem_limits_set( self, timestamp, parameters ):
         id, time, memory = parameters
         id, time, memory = int(id), float(time), int(memory)
@@ -134,7 +142,6 @@ class Wolf:
         id, binary, output = parameters
         id = int(id)
         self.__submits[id].binary = binary
-        self.__submits[id].test = 0
         self.__shedulers['solution_test'](int(id), 0)
     def replay_submit_test( self, timestamp, parameters ):
         id, test, status, time_peak, memory_peak = parameters
@@ -142,7 +149,6 @@ class Wolf:
         test = int(test)
         time_peak = float(time_peak)
         memory_peak = float(memory_peak)
-        assert self.__submits[id].test == test
         self.__submits[id].tests[test].result(status, time_peak, memory_peak)
         if test < len(self.__submits[id].tests) - 1:
             self.__shedulers['solution_test'](int(id), test + 1)

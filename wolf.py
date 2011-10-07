@@ -22,7 +22,7 @@ def cb_unix( socket, peer ):
     return []
 
 def cb_main( peer, socket, init ):
-    global actions
+    global net_actions
     log("INFO: peer %s connected" % str(peer))
     def result( data ):
         socket.send((json.dumps(data) + '\n').encode("utf-8"))
@@ -35,7 +35,7 @@ def cb_main( peer, socket, init ):
             return result(False)
         if not isinstance(data, dict) or 'action' not in data:
             return result(False)
-        return result(actions.get(data['action'], lambda data: False)(data))
+        return result(net_actions.get(data['action'], lambda data: False)(data))
         # False if data['action'] not in actions else actions[data['action']](data));
     tail = b''
     def cb_data( data ):
@@ -146,6 +146,11 @@ def action_problem_create( name, full ):
     id = wolf.problem_count()
     data.create("problem.create", [id, name, full])
     return id
+def action_problem_files_set( id, input, output ):
+    if wolf.problem_get(id) is None:
+        return False
+    data.create("problem.files.set", [id, input, output])
+    return True
 def action_problem_limits_set( id, time, memory ):
     if id < 0 or id >= wolf.problem_count():
         return False
@@ -187,7 +192,7 @@ def action_team_info( login ):
     team = wolf.team_get(login)
     return {'login': team.login, 'name': team.name} if team is not None else False
 
-actions = {
+net_actions = {
     'ping': lambda data: True,
     'archive.add': action_create(['problem'], action_archive_add),
     'archive.count': action_create([], action_archive_count),
@@ -200,6 +205,7 @@ actions = {
     'problem.checker.set': action_create(["id", "name", "source", "compiler"], action_problem_checker_set),
     'problem.checker.source': action_create(["id"], action_problem_checker_source),
     'problem.create': action_create(['name', 'full'], action_problem_create),
+    'problem.files.set': action_create(['id', 'input', 'output'], action_problem_files_set),
     'problem.limits.set': action_create(['id', 'time', 'memory'], action_problem_limits_set),
     'problem.test.add': action_create(['id', 'test', 'answer'], action_problem_test_add),
     'problem.test.count': action_create(['id'], action_problem_test_count),
@@ -291,32 +297,32 @@ def action_submit_compile( id ):
         return []
     judge.compile(command, source, callback)
 
-def action_submit_test( id, test ):
+def action_submit_test( id, test_no ):
     submit = wolf.submit_get(id)
     if submit.result is not None:
-        log("WARNING: tried to test already judged submission #%d (test %d)" % (id, test))
+        log("WARNING: tried to test already judged submission #%d (test %d)" % (id, test_no))
         return
-    assert 0 <= test < len(submit.tests)
+    assert 0 <= test_no < len(submit.tests)
     judge = judge_get()
     if judge is None:
-        judge_queue.push((action_submit_test, (id, test)))
+        judge_queue.push((action_submit_test, (id, test_no)))
         return
-    test = submit.tests[test]
+    test = submit.tests[test_no]
     binary = wolf.content_get(submit.binary)
     data_test = wolf.content_get(test.test)
     data_answer = wolf.content_get(test.answer)
+    problem = wolf.problem_get(submit.problem)
     checker = wolf.content_get(problem.checker.binary)
     def callback( status, maxtime, maxmemory):
-        log("submit #%d result on test #%d: %s" % (id, submit.test, Judge.status_str[status]))
-        maxtime = int(maxtime)
-        maxmemory = int(maxmemory)
-        data.create('submit.test', [id, submit.test, Judge.status_str[status], maxtime, maxmemory])
+        log("submit #%d result on test #%d: %s" % (id, test_no, Judge.status_str[status]))
+        data.create('submit.test', [id, test_no, Judge.status_str[status], maxtime, maxmemory])
         return []
-    # todo: input file, output file
     judge.test(
         binary=binary,
         test=data_test,
         answer=data_answer,
+        input = problem.input,
+        output = problem.output,
         time_limit=problem.time_limit,
         memory_limit=problem.memory_limit,
         checker=checker,
