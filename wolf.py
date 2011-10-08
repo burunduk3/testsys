@@ -88,12 +88,13 @@ s.listen(100)
 poll.add_listener(s, cb_judge)
 
 
-def action_create( parameters, continuation ):
+def action_create( parameters, continuation, default = False ):
     def action( data ):
-        for x in parameters:
-            if x not in data:
-               return False
-        return continuation(*[data[x] for x in parameters])
+        if not default:
+            for x in parameters:
+                if x not in data:
+                   return False
+        return continuation(*[data.get(x, None) for x in parameters])
     return action
 
 def action_archive_add( problem ):
@@ -106,9 +107,31 @@ def action_archive_add( problem ):
     data.create('archive.add', [problem])
     return number
 def action_archive_count():
-    return wolf.archive_count()
+    return len(wolf.archive_get().problem_list)
 def action_archive_list( start, limit ):
-    return wolf.archive_get()[start:start + limit]
+    return wolf.archive_get().problem_list[start:start + limit]
+def action_archive_submits( team, problem, start, limit ):
+    if not isinstance(start, int) or not isinstance(limit, int):
+        return False
+    archive = wolf.archive_get()
+    if team is None and problem is None:
+        submits = archive.submits_all
+    elif team is None and problem is not None:
+        submits = archive.submits_problem.get(problem, [])
+    elif team is not None and problem is None:
+        submits = archive.submits_team.get(team, [])
+    else:
+        submits = archive.submits.get((team, problem), [])
+    if start < 0:
+        limit += start
+        start = 0
+    if start >= len(submits):
+        start = 0
+        limit = 0
+    if start + limit > len(submits):
+        limit = len(submits) - start
+    start = len(submits) - start - limit
+    return {'count': len(submits), 'list': list(reversed(submits[start:start + limit]))}
 
 def action_compiler_add( id, binary, compile, run ):
     if wolf.compiler_get(id) is not None:
@@ -147,6 +170,19 @@ def action_problem_create( name, full ):
     id = wolf.problem_count()
     data.create("problem.create", [id, name, full])
     return id
+def action_problem_info( id ):
+    if isinstance(id, list):
+        return [action_problem_info(x) for x in id]
+    problem = wolf.problem_get(id)
+    if problem is None:
+        return False
+    # todo: return status of problem
+    return {
+        'name': problem.name, 'full': problem.full,
+        'input': problem.input, 'output': problem.output,
+        'time_limit': problem.time_limit, 'memory_limit': problem.memory_limit,
+        'tests': len(problem.tests)
+    }
 def action_problem_files_set( id, input, output ):
     if wolf.problem_get(id) is None:
         return False
@@ -204,6 +240,7 @@ net_actions = {
     'archive.add': action_create(['problem'], action_archive_add),
     'archive.count': action_create([], action_archive_count),
     'archive.list': action_create(['start', 'limit'], action_archive_list),
+    'archive.submits': action_create(['team', 'problem', 'start', 'limit'], action_archive_submits, default=True),
     'compiler.add': action_create(['id', 'binary', 'compile', 'run'], action_compiler_add),
     'compiler.info': action_create(['id'], action_compiler_info),
     'compiler.list': action_create([], action_compiler_list),
@@ -212,6 +249,7 @@ net_actions = {
     'problem.checker.set': action_create(["id", "name", "source", "compiler"], action_problem_checker_set),
     'problem.checker.source': action_create(["id"], action_problem_checker_source),
     'problem.create': action_create(['name', 'full'], action_problem_create),
+    'problem.info': action_create(['id'], action_problem_info),
     'problem.files.set': action_create(['id', 'input', 'output'], action_problem_files_set),
     'problem.limits.set': action_create(['id', 'time', 'memory'], action_problem_limits_set),
     'problem.test.add': action_create(['id', 'test', 'answer'], action_problem_test_add),
@@ -323,6 +361,7 @@ def action_submit_test( id, test_no ):
         log("submit #%d result on test #%d: %s" % (id, test_no, Judge.status_str[status]))
         data.create('submit.test', [id, test_no, Judge.status_str[status], maxtime, maxmemory])
         return []
+    # todo: use compiler 'run' command
     judge.test(
         binary=binary,
         test=data_test,

@@ -61,6 +61,29 @@ class Test:
     def result( self, status, time_peak, memory_peak ):
         self.status, self.time_peak, self.memory_peak = status, time_peak, memory_peak
 
+class Archive:
+    def __init__( self ):
+        self.problems = set()
+        self.problem_list = []
+        self.submits_all = []
+        self.submits_team = {}
+        self.submits_problem = {}
+        self.submits = {}
+    def add_problem( self, problem ):
+        self.problems.add(problem)
+        self.problem_list.append(problem)
+    def add_submit( self, team, problem, id ):
+        self.submits_all.append(id)
+        if team not in self.submits_team:
+            submits_team[team] = []
+        submits_team[team].append(id)
+        if problem not in self.submits_problem:
+            submits_problem[problem] = []
+        submits_problem[problem].append(id)
+        if (team, problem) not in self.submits:
+            submits[(team, problem)] = []
+        submits[(team, problem)].append(id)
+
 class Wolf:
     def __init__( self, timestamp, shedulers, data ):
         self.__timestamp = timestamp
@@ -71,8 +94,7 @@ class Wolf:
         self.__submits = []
         self.__teams = {}
         self.__data = data
-        self.__archive = set()
-        self.__archive_list = []
+        self.__archive = Archive()
 
     def replayers( self ):
         return {
@@ -96,14 +118,14 @@ class Wolf:
 
     def replay_archive_add( self, timestamp, parameters ):
         problem_id = int(*parameters)
-        assert problem_id not in self.__archive and 0 <= problem_id < len(self.__problems)
-        self.__archive.add(problem_id)
-        self.__archive_list.add(problem_id)
+        assert problem_id not in self.__archive.problems and 0 <= problem_id < len(self.__problems)
+        self.__archive.add_problem(problem_id)
     def replay_archive_submit( self, timestamp, parameters ):
         id, team, problem,  source, compiler = parameters
         assert len(self.__submits) == int(id)
         problem = int(problem)
-        assert problem in self.__archive
+        assert problem in self.__archive.problems
+        self.__archive.add_submit(team, problem, id)
         submit = Submit(problem, source, compiler)
         submit.source = (None, int(team))
         self.__submits.append(submit)
@@ -173,8 +195,8 @@ class Wolf:
         login, name, password = parameters
         self.__teams[login] = Team(login, name, password)
 
-    def archive_get():
-        return self.__archive_list
+    def archive_get( self ):
+        return self.__archive
     def compiler_get( self, id ):
         return self.__compilers.get(id)
     def compiler_list( self ):
