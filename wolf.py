@@ -110,6 +110,13 @@ def action_archive_count():
     return len(wolf.archive_get().problem_list)
 def action_archive_list( start, limit ):
     return wolf.archive_get().problem_list[start:start + limit]
+def action_archive_submit( team, problem, name, source, compiler ):
+    if wolf.problem_get(problem) is None or wolf.compiler_get(compiler) is None or wolf.team_get(team) is None:
+        return False
+    source = data.save(base64.b64decode(source.encode('ascii')), name)
+    id = wolf.submit_count()
+    data.create('archive.submit', [id, team, problem, source, compiler])
+    return id
 def action_archive_submits( team, problem, start, limit ):
     if not isinstance(start, int) or not isinstance(limit, int):
         return False
@@ -245,6 +252,7 @@ net_actions = {
     'archive.add': action_create(['problem'], action_archive_add),
     'archive.count': action_create([], action_archive_count),
     'archive.list': action_create(['start', 'limit'], action_archive_list),
+    'archive.submit': action_create(['team', 'problem', 'name', 'source', 'compiler'], action_submit),
     'archive.submits': action_create(['team', 'problem', 'start', 'limit'], action_archive_submits, default=True),
     'compiler.add': action_create(['id', 'binary', 'compile', 'run'], action_compiler_add),
     'compiler.info': action_create(['id'], action_compiler_info),
