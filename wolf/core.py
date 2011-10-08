@@ -104,8 +104,9 @@ class Wolf:
             'compiler.add': self.replay_compiler_add,
             'compiler.remove': self.replay_compiler_remove,
             'content': self.replay_content,
-            'problem.checker.set': self.replay_problem_checker_set,
             'problem.checker.compiled': self.replay_problem_checker_compiled,
+            'problem.checker.recompile': self.replay_problem_checker_recompile,
+            'problem.checker.set': self.replay_problem_checker_set,
             'problem.create': self.replay_problem_create,
             'problem.files.set': self.replay_problem_files_set,
             'problem.limits.set': self.replay_problem_limits_set,
@@ -141,16 +142,20 @@ class Wolf:
         start = int(start)
         size = int(size)
         self.__content[hash] = Content(hash, name, timestamp, start, size, self.__data)
-    def replay_problem_checker_set( self, timestamp, parameters ):
-        id, source, compiler = parameters
-        id = int(id)
-        self.__problems[id].checker = Checker(source, compiler)
-        self.__shedulers['checker_compile'](id)
     def replay_problem_checker_compiled( self, timestamp, parameters ):
         id, binary, output = parameters
         id = int(id)
         assert self.__problems[id].checker is not None
         self.__problems[id].checker.binary = binary
+    def replay_problem_checker_recompile( self, timestamp, parameters ):
+        id = int(parameters[0])
+        self.__problems[id].checker.binary = None
+        self.__shedulers['checker_compile'](id)
+    def replay_problem_checker_set( self, timestamp, parameters ):
+        id, source, compiler = parameters
+        id = int(id)
+        self.__problems[id].checker = Checker(source, compiler)
+        self.__shedulers['checker_compile'](id)
     def replay_problem_create( self, timestamp, parameters ):
         id, name, full = parameters
         assert len(self.__problems) == int(id)

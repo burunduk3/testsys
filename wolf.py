@@ -100,10 +100,10 @@ def action_create( parameters, continuation, default = False ):
 def action_archive_add( problem ):
     if not isinstance(problem, int) or \
        not 0 <= problem < wolf.problem_count() or \
-       problem in wolf.archive_get():
+       problem in wolf.archive_get().problems:
            # todo: optimize long check
            return False
-    number = len(wolf.archive_get())
+    number = len(wolf.archive_get().problem_list)
     data.create('archive.add', [problem])
     return number
 def action_archive_count():
@@ -151,6 +151,11 @@ def action_compiler_remove( id ):
     data.create("compiler.remove", [id])
     return True
 
+def action_problem_checker_recompile( id ):
+    if wolf.problem_get(id) is None:
+        return False;
+    data.create("problem.checker.recompile", [id])
+    return True
 def action_problem_checker_set( id, name, source, compiler ):
     if id < 0 or id >= wolf.problem_count():
         return False
@@ -246,6 +251,7 @@ net_actions = {
     'compiler.list': action_create([], action_compiler_list),
     'compiler.remove': action_create(['id'], action_compiler_remove),
     # 'problem.checker.default':
+    'problem.checker.recompile': action_create(["id"], action_problem_checker_recompile),
     'problem.checker.set': action_create(["id", "name", "source", "compiler"], action_problem_checker_set),
     'problem.checker.source': action_create(["id"], action_problem_checker_source),
     'problem.create': action_create(['name', 'full'], action_problem_create),
@@ -289,11 +295,11 @@ def action_checker_compile( id ):
     if compiler is None:
         # todo: add actions into list of bad compilers
         return problem_add("compiler %s doesn't exist, needed for checker in problem #%d" % (checker.compiler, id))
-    problem.checker.binary = False
     judge = judge_get()
     if judge is None:
         judge_queue.push((action_checker_compile, (id,)))
         return
+    problem.checker.binary = False
     source = wolf.content_get(checker.source)
     binary_name = magic_parse(compiler.binary, {'name': source.name})
     command = magic_parse(compiler.compile, {'name': source.name, 'binary': binary_name})
