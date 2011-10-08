@@ -102,10 +102,11 @@ def action_archive_add( problem ):
        problem in wolf.archive_get():
            # todo: optimize long check
            return False
+    number = len(wolf.archive_get())
     data.create('archive.add', [problem])
-    return len(wolf.archive_get())
+    return number
 def action_archive_count():
-    return len(wolf.archive_count())
+    return wolf.archive_count()
 def action_archive_list( start, limit ):
     return wolf.archive_get()[start:start + limit]
 
@@ -177,6 +178,12 @@ def action_submit( problem, name, source, compiler ):
     id = wolf.submit_count()
     data.create('submit', [id, problem, source, compiler])
     return id
+def action_submit_status( id ):
+    submit = wolf.submit_get(id)
+    if submit is None:
+        return False
+    status, test = submit.result if submit.result is not None else (None, None)
+    return {'status': status, 'test': test}
 
 def action_team_add( login, name, password ):
     if wolf.team_get(login) is not None:
@@ -212,6 +219,7 @@ net_actions = {
     #'problem.test.insert':
     #'problem.test.remove':
     'submit': action_create(['problem', 'name', 'source', 'compiler'], action_submit),
+    'submit.status': action_create(['id'], action_submit_status),
     'team.add': action_create(['login', 'name', 'password'], action_team_add),
     'team.info': action_create(['login'], action_team_info),
     'team.login': action_create(['login', 'password'], action_team_login)
@@ -267,7 +275,6 @@ def action_checker_compile( id ):
 def action_submit_compile( id ):
     submit = wolf.submit_get(id)
     if submit.binary is not None:
-        log("WARNING: tried to compile already compiled submission #%d" % id)
         return
     problem = wolf.problem_get(submit.problem)
     if problem is None or problem.checker is None or problem.checker.binary is None:
@@ -299,8 +306,7 @@ def action_submit_compile( id ):
 
 def action_submit_test( id, test_no ):
     submit = wolf.submit_get(id)
-    if submit.result is not None:
-        log("WARNING: tried to test already judged submission #%d (test %d)" % (id, test_no))
+    if submit.result is not None or submit.tests[test_no].status is not None:
         return
     assert 0 <= test_no < len(submit.tests)
     judge = judge_get()

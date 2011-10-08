@@ -27,10 +27,27 @@ class Problem:
         self.output = None
 
 class Submit:
-    def __init__( self, problem, source, compiler ):
+    def __init__( self, problem, source, compiler, tests ):
         self.problem, self.source, self.compiler = problem, source, compiler
+        self.tests = [Test(*x) for x in tests]
+        self.testings = {0}
+        self.last_test = None
         self.result = None
         self.binary = None
+    def tested( self, test, status, time, memory ):
+        assert test in self.testings
+        self.testings.remove(test)
+        self.tests[test].result(status, time, memory)
+        self.last_test = test
+        if len(self.testings) == 0:
+            test = self.last_test + 1
+            if status == "OK" and test < len(self.tests):
+                self.testings.add(test)
+            else:
+                if status == "OK":
+                    self.last_test = None
+                    status = "Accepted"
+                self.result = (status, self.last_test)
 
 class Team:
     def __init__( self, login, name, password ):
@@ -39,6 +56,7 @@ class Team:
 class Test:
     def __init__( self, test, answer ):
         self.test, self.answer = test, answer
+        self.status = None
         self.output = None
     def result( self, status, time_peak, memory_peak ):
         self.status, self.time_peak, self.memory_peak = status, time_peak, memory_peak
@@ -87,7 +105,6 @@ class Wolf:
         problem = int(problem)
         assert problem in self.__archive
         submit = Submit(problem, source, compiler)
-        submit.tests = [Test(*x) for x in self.__problems[problem].tests]
         submit.source = (None, int(team))
         self.__submits.append(submit)
         self.__shedulers['solution_compile'](int(id))
@@ -134,26 +151,24 @@ class Wolf:
         id, problem,  source, compiler = parameters
         assert len(self.__submits) == int(id)
         problem = int(problem)
-        submit = Submit(problem, source, compiler)
-        submit.tests = [Test(*x) for x in self.__problems[problem].tests]
+        submit = Submit(problem, source, compiler, self.__problems[problem].tests)
         self.__submits.append(submit)
         self.__shedulers['solution_compile'](int(id))
     def replay_submit_compiled( self, timestamp, parameters ):
         id, binary, output = parameters
         id = int(id)
         self.__submits[id].binary = binary
-        self.__shedulers['solution_test'](int(id), 0)
+        for test in self.__submits[id].testings:
+            self.__shedulers['solution_test'](id, test)
     def replay_submit_test( self, timestamp, parameters ):
         id, test, status, time_peak, memory_peak = parameters
         id = int(id)
         test = int(test)
         time_peak = float(time_peak)
         memory_peak = float(memory_peak)
-        self.__submits[id].tests[test].result(status, time_peak, memory_peak)
-        if test < len(self.__submits[id].tests) - 1:
-            self.__shedulers['solution_test'](int(id), test + 1)
-        else:
-            self.__submits[id].result = True
+        self.__submits[id].tested(test, status, time_peak, memory_peak)
+        for test in self.__submits[id].testings:
+            self.__shedulers['solution_test'](id, test)
     def replay_team_add( self, timestamp, parameters ):
         login, name, password = parameters
         self.__teams[login] = Team(login, name, password)
