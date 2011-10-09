@@ -106,12 +106,27 @@ def action_archive_add( problem ):
     number = len(wolf.archive_get().problem_list)
     data.create('archive.add', [problem])
     return number
+def action_archive_compiler_add( id, name ):
+    if id in wolf.archive_get().compilers or wolf.compiler_get(id) is None:
+        return False
+    data.create('archive.compiler.add', [id, name])
+    return True
+def action_archive_compiler_list():
+    compilers = wolf.archive_get().compilers
+    return [{'id': x, 'name': compilers[x]} for x in sorted(compilers.keys())]
+def action_archive_compiler_remove( id ):
+    if id not in wolf.archive_get().compilers:
+        return False
+    data.create('archive.compiler.remove', [id])
+    return True
 def action_archive_count():
     return len(wolf.archive_get().problem_list)
 def action_archive_list( start, limit ):
     return wolf.archive_get().problem_list[start:start + limit]
 def action_archive_submit( team, problem, name, source, compiler ):
-    if wolf.problem_get(problem) is None or wolf.compiler_get(compiler) is None or wolf.team_get(team) is None:
+    archive = wolf.archive_get()
+    if wolf.problem_get(problem) is None or wolf.compiler_get(compiler) is None or wolf.team_get(team) is None or \
+            problem not in archive.problems or compiler not in archive.compilers:
         return False
     source = data.save(base64.b64decode(source.encode('ascii')), name)
     id = wolf.submit_count()
@@ -185,6 +200,8 @@ def action_problem_create( name, full ):
 def action_problem_info( id ):
     if isinstance(id, list):
         return [action_problem_info(x) for x in id]
+    if not isinstance(id, int):
+        return False
     problem = wolf.problem_get(id)
     if problem is None:
         return False
@@ -250,6 +267,9 @@ def action_team_info( login ):
 net_actions = {
     'ping': lambda data: True,
     'archive.add': action_create(['problem'], action_archive_add),
+    'archive.compiler.add': action_create(['id', 'name'], action_archive_compiler_add),
+    'archive.compiler.list': action_create([], action_archive_compiler_list),
+    'archive.compiler.remove': action_create(['id'], action_archive_compiler_remove),
     'archive.count': action_create([], action_archive_count),
     'archive.list': action_create(['start', 'limit'], action_archive_list),
     'archive.submit': action_create(['team', 'problem', 'name', 'source', 'compiler'], action_submit),

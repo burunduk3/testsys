@@ -7,15 +7,19 @@ class Data:
         self.__binfile, self.__logfile = binfile, logfile
 
     def start( self ):
+        self.__start = time.time()
         self.__bin = open(self.__binfile, 'r+b')
         size = self.__bin.seek(0, io.SEEK_END)
         log(("opened index log (%s), size: %d bytes") % (self.__binfile, size))
 
+        count = 0
         with open(self.__logfile, 'r') as events:
             for line in events.readlines():
                 self.__replay(line)
+                count += 1
             size = events.tell()
-        log("read %d bytes from event log (%s)" % (size, self.__logfile))
+        time_read = time.time() - self.__start
+        log("read %d bytes (%d events) from event log (%s) in %.2f seconds" % (size, count, self.__logfile, time_read))
 
         self.__log = open(self.__logfile, 'a')
         assert size == self.__log.tell()
@@ -26,7 +30,7 @@ class Data:
         if event not in self.replayers:
             log("FATAL: cannot replay event \"%s\" (no such event)" % event)
             sys.exit(1)
-        log("replay log event: %s" % str(data))
+        # log("replay log event: %s" % str(data))
         data = data[2:]
         if not isinstance(data, list):
            data = [data]

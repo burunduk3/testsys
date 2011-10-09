@@ -276,3 +276,4 @@
 1318086708	content	"f5990ed38424056fb42840101b40e216"	"check.exe"	"74137"	"48128"
 1318086708	content	"a9bebae2fe94ff5d48f7fa0b5ad5e203"	"a9bebae2fe94ff5d48f7fa0b5ad5e203"	"122265"	"216"
 1318086708	problem.checker.compiled	"0"	"f5990ed38424056fb42840101b40e216"	"a9bebae2fe94ff5d48f7fa0b5ad5e203"
+1318183642	archive.compiler.add	"win32.c.gcc"	"MinGW\PC++\P4.5.2"

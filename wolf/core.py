@@ -46,7 +46,7 @@ class Submit:
             else:
                 if status == "OK":
                     self.last_test = None
-                    status = "Accepted"
+                    status = "AC"
                 self.result = (status, self.last_test)
 
 class Team:
@@ -69,6 +69,7 @@ class Archive:
         self.submits_team = {}
         self.submits_problem = {}
         self.submits = {}
+        self.compilers = {}
     def add_problem( self, problem ):
         self.problems.add(problem)
         self.problem_list.append(problem)
@@ -99,6 +100,8 @@ class Wolf:
     def replayers( self ):
         return {
             'archive.add': self.replay_archive_add,
+            'archive.compiler.add': self.replay_archive_compiler_add,
+            'archive.compiler.remove': self.replay_archive_compiler_remove,
             # 'archive.remove': self.replay_archive_remove,
             'archive.submit': self.replay_archive_submit,
             'compiler.add': self.replay_compiler_add,
@@ -121,6 +124,15 @@ class Wolf:
         problem_id = int(*parameters)
         assert problem_id not in self.__archive.problems and 0 <= problem_id < len(self.__problems)
         self.__archive.add_problem(problem_id)
+    def replay_archive_compiler_add( self, timestamp, parameters ):
+        compiler, name = parameters
+        assert compiler not in self.__archive.compilers
+        assert compiler in self.__compilers
+        self.__archive.compilers[compiler] = name
+    def replay_archive_compiler_remove( self, timestamp, parameters ):
+        compiler = parameters[0]
+        assert compiler in self.__archive.compilers
+        del self.__archive.compilers[compiler]
     def replay_archive_submit( self, timestamp, parameters ):
         id, team, problem,  source, compiler = parameters
         assert len(self.__submits) == int(id)
@@ -128,7 +140,7 @@ class Wolf:
         assert problem in self.__archive.problems
         self.__archive.add_submit(team, problem, id)
         submit = Submit(problem, source, compiler)
-        submit.source = (None, int(team))
+        submit.source = (None, team)
         self.__submits.append(submit)
         self.__shedulers['solution_compile'](int(id))
     def replay_compiler_add( self, timestamp, parameters ):
