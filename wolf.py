@@ -272,7 +272,7 @@ net_actions = {
     'archive.compiler.remove': action_create(['id'], action_archive_compiler_remove),
     'archive.count': action_create([], action_archive_count),
     'archive.list': action_create(['start', 'limit'], action_archive_list),
-    'archive.submit': action_create(['team', 'problem', 'name', 'source', 'compiler'], action_submit),
+    'archive.submit': action_create(['team', 'problem', 'name', 'source', 'compiler'], action_archive_submit),
     'archive.submits': action_create(['team', 'problem', 'start', 'limit'], action_archive_submits, default=True),
     'compiler.add': action_create(['id', 'binary', 'compile', 'run'], action_compiler_add),
     'compiler.info': action_create(['id'], action_compiler_info),
@@ -370,7 +370,8 @@ def action_submit_compile( id ):
             data.create('submit.compiled', [id, binary, output])
         elif result is Judge.CE:
             log("submit #%d: compilation error, output:\n%s" % (id, output.decode('iso8859-1')))
-            # todo: add this into database
+            output = data.save(output)
+            data.create('submit.compiled', [id, '', output])
         else:
             problem_add("failed to compile submit #%d" % id)
         return []

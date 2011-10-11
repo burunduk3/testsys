@@ -76,14 +76,14 @@ class Archive:
     def add_submit( self, team, problem, id ):
         self.submits_all.append(id)
         if team not in self.submits_team:
-            submits_team[team] = []
-        submits_team[team].append(id)
+            self.submits_team[team] = []
+        self.submits_team[team].append(id)
         if problem not in self.submits_problem:
-            submits_problem[problem] = []
-        submits_problem[problem].append(id)
+            self.submits_problem[problem] = []
+        self.submits_problem[problem].append(id)
         if (team, problem) not in self.submits:
-            submits[(team, problem)] = []
-        submits[(team, problem)].append(id)
+            self.submits[(team, problem)] = []
+        self.submits[(team, problem)].append(id)
 
 class Wolf:
     def __init__( self, timestamp, shedulers, data ):
@@ -139,8 +139,8 @@ class Wolf:
         problem = int(problem)
         assert problem in self.__archive.problems
         self.__archive.add_submit(team, problem, id)
-        submit = Submit(problem, source, compiler)
-        submit.source = (None, team)
+        submit = Submit(problem, source, compiler, self.__problems[problem].tests)
+        submit.origin = (None, team)
         self.__submits.append(submit)
         self.__shedulers['solution_compile'](int(id))
     def replay_compiler_add( self, timestamp, parameters ):
@@ -196,9 +196,12 @@ class Wolf:
     def replay_submit_compiled( self, timestamp, parameters ):
         id, binary, output = parameters
         id = int(id)
-        self.__submits[id].binary = binary
-        for test in self.__submits[id].testings:
-            self.__shedulers['solution_test'](id, test)
+        self.__submits[id].binary = binary if binary != '' else None
+        if binary is not None:
+            for test in self.__submits[id].testings:
+                self.__shedulers['solution_test'](id, test)
+        else:
+            self.__submits[id].result = ('CE', None)
     def replay_submit_test( self, timestamp, parameters ):
         id, test, status, time_peak, memory_peak = parameters
         id = int(id)
