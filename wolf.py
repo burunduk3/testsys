@@ -244,6 +244,8 @@ def action_submit( problem, name, source, compiler ):
     data.create('submit', [id, problem, source, compiler])
     return id
 def action_submit_status( id ):
+    if isinstance(id, list):
+        return [action_submit_status(x) for x in id]
     submit = wolf.submit_get(id)
     if submit is None:
         return False

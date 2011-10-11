@@ -135,7 +135,8 @@ class Wolf:
         del self.__archive.compilers[compiler]
     def replay_archive_submit( self, timestamp, parameters ):
         id, team, problem,  source, compiler = parameters
-        assert len(self.__submits) == int(id)
+        id = int(id)
+        assert len(self.__submits) == id
         problem = int(problem)
         assert problem in self.__archive.problems
         self.__archive.add_submit(team, problem, id)
@@ -196,8 +197,8 @@ class Wolf:
     def replay_submit_compiled( self, timestamp, parameters ):
         id, binary, output = parameters
         id = int(id)
-        self.__submits[id].binary = binary if binary != '' else None
-        if binary is not None:
+        self.__submits[id].binary = binary if binary != '' else False
+        if binary is not False:
             for test in self.__submits[id].testings:
                 self.__shedulers['solution_test'](id, test)
         else:
