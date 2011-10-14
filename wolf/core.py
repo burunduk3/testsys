@@ -27,8 +27,8 @@ class Problem:
         self.output = None
 
 class Submit:
-    def __init__( self, problem, source, compiler, tests ):
-        self.problem, self.source, self.compiler = problem, source, compiler
+    def __init__( self, time, problem, source, compiler, tests ):
+        self.time, self.problem, self.source, self.compiler = time, problem, source, compiler
         self.tests = [Test(*x) for x in tests]
         self.testings = {0}
         self.last_test = None
@@ -140,7 +140,7 @@ class Wolf:
         problem = int(problem)
         assert problem in self.__archive.problems
         self.__archive.add_submit(team, problem, id)
-        submit = Submit(problem, source, compiler, self.__problems[problem].tests)
+        submit = Submit(timestamp, problem, source, compiler, self.__problems[problem].tests)
         submit.origin = (None, team)
         self.__submits.append(submit)
         self.__shedulers['solution_compile'](int(id))
@@ -191,7 +191,7 @@ class Wolf:
         id, problem,  source, compiler = parameters
         assert len(self.__submits) == int(id)
         problem = int(problem)
-        submit = Submit(problem, source, compiler, self.__problems[problem].tests)
+        submit = Submit(timestamp, problem, source, compiler, self.__problems[problem].tests)
         self.__submits.append(submit)
         self.__shedulers['solution_compile'](int(id))
     def replay_submit_compiled( self, timestamp, parameters ):
@@ -228,11 +228,11 @@ class Wolf:
     def problem_count( self ):
         return len(self.__problems)
     def problem_get( self, id ):
-        return self.__problems[id]
+        return self.__problems[id] if 0 <= id < len(self.__problems) else None
     def submit_count( self ):
         return len(self.__submits)
     def submit_get( self, id ):
-        return self.__submits[id]
+        return self.__submits[id] if 0 <= id < len(self.__submits) else None
     def team_get( self, login ):
         return self.__teams.get(login)
 

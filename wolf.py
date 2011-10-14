@@ -194,7 +194,8 @@ def action_problem_checker_source( id ):
     checker = wolf.problem_get(id).checker
     if checker is None:
         return None
-    return base64.b64encode(data.load(checker.source)).decode('ascii')
+    source = wolf.content_get(checker.source)
+    return base64.b64encode(source.load()).decode('ascii')
 def action_problem_create( name, full ):
     id = wolf.problem_count()
     data.create("problem.create", [id, name, full])
@@ -253,7 +254,7 @@ def action_submit_info( id ):
     submit = wolf.submit_get(id)
     if submit is None:
         return False
-    data = {'id': id, 'problem': submit.problem, 'status': 'Waiting'}
+    data = {'id': id, 'problem': submit.problem, 'status': 'Waiting', 'time': submit.time}
     if submit.binary is not None:
        data['status'] = 'Running'
     if submit.result is not None:
@@ -264,7 +265,7 @@ def action_submit_info( id ):
     return data
 def action_submit_report( id ):
     if isinstance(id, list):
-        return [action_submit_info(x) for x in id]
+        return [action_submit_report(x) for x in id]
     if not isinstance(id, int):
         return False
     submit = wolf.submit_get(id)
@@ -272,7 +273,7 @@ def action_submit_report( id ):
         return False
     if submit.binary is None:
         return False
-    compiler_output = data.load(submit.compiler_output)
+    compiler_output = wolf.content_get(submit.compiler_output).load()
     return {'compiler_output': base64.b64encode(compiler_output).decode('ascii')}
 #def action_submit_status( id ):
 #    if isinstance(id, list):
