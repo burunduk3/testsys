@@ -3,8 +3,8 @@ from .common import log
 from dts.protocol import Packet
 
 class Judge:
-    OK, CE, FAIL = range(3)
-    status_str = ["OK", "CE", "Fail"]
+    OK, CE, WA, FAIL = range(4)
+    status_str = ["OK", "CE", "WA", "Fail"]
 
     def __init__( self, socket, callback_ready ):
         self.__socket, self.__ready = socket, callback_ready

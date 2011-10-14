@@ -275,6 +275,16 @@ def action_submit_report( id ):
         return False
     compiler_output = wolf.content_get(submit.compiler_output).load()
     return {'compiler_output': base64.b64encode(compiler_output).decode('ascii')}
+def action_submit_source( id ):
+    if isinstance(id, list):
+        return [action_submit_source(x) for x in id]
+    if not isinstance(id, int):
+        return False
+    submit = wolf.submit_get(id)
+    if submit is None:
+        return False
+    source = wolf.content_get(submit.source).load()
+    return base64.b64encode(source).decode('ascii')
 #def action_submit_status( id ):
 #    if isinstance(id, list):
 #        return [action_submit_status(x) for x in id]
@@ -327,6 +337,7 @@ net_actions = {
     'submit': action_create(['problem', 'name', 'source', 'compiler'], action_submit),
     'submit.info': action_create(['id'], action_submit_info),
     'submit.report': action_create(['id'], action_submit_report),
+    'submit.source': action_create(['id'], action_submit_source),
     # removed: 'submit.status': action_create(['id'], action_submit_status),
     'team.add': action_create(['login', 'name', 'password'], action_team_add),
     'team.info': action_create(['login'], action_team_info),
