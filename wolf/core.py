@@ -198,7 +198,8 @@ class Wolf:
         id, binary, output = parameters
         id = int(id)
         self.__submits[id].binary = binary if binary != '' else False
-        if binary is not False:
+        self.__submits[id].compiler_output = output
+        if self.__submits[id].binary is not False:
             for test in self.__submits[id].testings:
                 self.__shedulers['solution_test'](id, test)
         else:

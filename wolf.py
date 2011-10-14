@@ -9,6 +9,8 @@ from wolf.queue import Queue
 from wolf.judge import Judge
 from wolf.magic import magic_parse
 
+log.write(" === ARCTIC WOLF ===")
+
 parser = argparse.ArgumentParser(description="Arctic Wolf: contest management system.")
 parser.add_argument('--port', '-p', action='store', dest='port', required=True, help='Default port to listen.')
 parser.add_argument('--judge-port', action='store', dest='judge_port', default=17239, help='Port to listen connections from judges.')
@@ -243,14 +245,43 @@ def action_submit( problem, name, source, compiler ):
     id = wolf.submit_count()
     data.create('submit', [id, problem, source, compiler])
     return id
-def action_submit_status( id ):
+def action_submit_info( id ):
     if isinstance(id, list):
-        return [action_submit_status(x) for x in id]
+        return [action_submit_info(x) for x in id]
+    if not isinstance(id, int):
+        return False
     submit = wolf.submit_get(id)
     if submit is None:
         return False
-    status, test = submit.result if submit.result is not None else (None, None)
-    return {'status': status, 'test': test}
+    data = {'id': id, 'problem': submit.problem, 'status': 'Waiting'}
+    if submit.binary is not None:
+       data['status'] = 'Running'
+    if submit.result is not None:
+       data['status'] = 'Result'
+       result, test = submit.result if submit.result is not None else (None, None)
+       data['result'] = result
+       data['test'] = test
+    return data
+def action_submit_report( id ):
+    if isinstance(id, list):
+        return [action_submit_info(x) for x in id]
+    if not isinstance(id, int):
+        return False
+    submit = wolf.submit_get(id)
+    if submit is None:
+        return False
+    if submit.binary is None:
+        return False
+    compiler_output = data.load(submit.compiler_output)
+    return {'compiler_output': base64.b64encode(compiler_output).decode('ascii')}
+#def action_submit_status( id ):
+#    if isinstance(id, list):
+#        return [action_submit_status(x) for x in id]
+#    submit = wolf.submit_get(id)
+#    if submit is None:
+#        return False
+#    status, test = submit.result if submit.result is not None else (None, None)
+#    return {'status': status, 'test': test}
 
 def action_team_add( login, name, password ):
     if wolf.team_get(login) is not None:
@@ -293,7 +324,9 @@ net_actions = {
     #'problem.test.insert':
     #'problem.test.remove':
     'submit': action_create(['problem', 'name', 'source', 'compiler'], action_submit),
-    'submit.status': action_create(['id'], action_submit_status),
+    'submit.info': action_create(['id'], action_submit_info),
+    'submit.report': action_create(['id'], action_submit_report),
+    # removed: 'submit.status': action_create(['id'], action_submit_status),
     'team.add': action_create(['login', 'name', 'password'], action_team_add),
     'team.info': action_create(['login'], action_team_info),
     'team.login': action_create(['login', 'password'], action_team_login)
