@@ -389,7 +389,7 @@ def action_checker_compile( id ):
         else:
             log("failed to compile checker for problem #%d:\n%s" % (id, output.decode('iso8859-1')))
             return []
-    judge.compile(command, source, callback)
+    judge.compile(command, source, binary_name, callback)
 
 def action_submit_compile( id ):
     submit = wolf.submit_get(id)
@@ -422,7 +422,7 @@ def action_submit_compile( id ):
         else:
             problem_add("failed to compile submit #%d" % id)
         return []
-    judge.compile(command, source, callback)
+    judge.compile(command, source, binary_name, callback)
 
 def action_submit_test( id, test_no ):
     submit = wolf.submit_get(id)

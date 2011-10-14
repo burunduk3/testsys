@@ -3,14 +3,14 @@ from .common import log
 from dts.protocol import Packet
 
 class Judge:
-    OK, CE, WA, FAIL = range(4)
-    status_str = ["OK", "CE", "WA", "Fail"]
+    OK, CE, WA, RE, TL, ML, FAIL = range(7)
+    status_str = ["OK", "CE", "WA", "RE", "TL", "ML", "Fail"]
 
     def __init__( self, socket, callback_ready ):
         self.__socket, self.__ready = socket, callback_ready
         self.__message_id = 0
         self.__response = {None: self.__authorize}
-        self.__status = {Judge.status_str[x]: x for x in [Judge.OK, Judge.CE, Judge.WA, Judge.FAIL]}
+        self.__status = {Judge.status_str[x]: x for x in [Judge.OK, Judge.CE, Judge.WA, Judge.RE, Judge.TL, Judge.ML, Judge.FAIL]}
     def name( self ):
         return self.__name
 
@@ -55,6 +55,8 @@ class Judge:
         return self.__normal(callback, [
             (b'MaxTime', '0', lambda x: 1e-7 * int(x)), # testsys judge returns time in 1/10⁷ seconds
             (b'MaxMemory', '0', lambda x: int(x))
+            # todo: use additional parameters
+            #   UlitityOutput (output of checker)
         ])
 
     def receive( self, packet ):
@@ -64,16 +66,17 @@ class Judge:
             return []
         return self.__response[id](packet)
 
-    def compile( self, command, source, callback ):
+    def compile( self, command, source, binary_name, callback ):
         id = ('id_%08d' % self.__message_id).encode('ascii')
         self.__message_id += 1
         self.__response[id] = self.__compiled(callback)
         source_data = ('%s\\%s>%d|\r' % (source.hash, source.name, source.time)).encode('utf-8') + source.load()
+        mcn = os.path.splitext(binary_name)[0] # that's so-called 'main class name', ask KOTEHOK (vk.com/kotehok) for its meaning
         self.__socket.send(Packet({
             b'ID': id,
             b'Command': b'compile',
             b'Compiler': command.encode('utf-8'),
-            b'Source': os.path.splitext(source.name)[0].encode('utf-8'), # specifix of testsys judge, remove as soon as possible
+            b'Source': mcn.encode('utf-8'),
             b'SourceFile': source_data,
             # b'BinaryName': binary_name.encode('utf-8') # not supported by judge
         })())
@@ -87,10 +90,11 @@ class Judge:
                 if f.hash in files else \
                     ('%s\\%s>%d' % (f.hash, f.name, f.time)).encode('utf-8')
             self.__response[id] = self.__tested(callback)
+            mcn = os.path.splitext(binary.name)[0]
             self.__socket.send(Packet({
                 b'ID': id,
                 b'Command': b'test',
-                b'Source': os.path.splitext(binary.name)[0].encode('utf-8'), # that's so-called 'main class name', ask KOTEHOK (vk.com/kotehok) for its meaning
+                b'Source': mcn.encode('utf-8'),
                 b'ExeFile': path(binary),
                 b'TestPath': path(test),
                 b'AnswerPath': path(answer),
