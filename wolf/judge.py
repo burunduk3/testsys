@@ -10,7 +10,7 @@ class Judge:
         self.__socket, self.__ready = socket, callback_ready
         self.__message_id = 0
         self.__response = {None: self.__authorize}
-        self.__status = {Judge.status_str[x]: x for x in [Judge.OK, Judge.CE, Judge.FAIL]}
+        self.__status = {Judge.status_str[x]: x for x in [Judge.OK, Judge.CE, Judge.WA, Judge.FAIL]}
     def name( self ):
         return self.__name
 
