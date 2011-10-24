@@ -81,7 +81,7 @@ class Judge:
             # b'BinaryName': binary_name.encode('utf-8') # not supported by judge
         })())
 
-    def test( self, *, binary, test, answer, input, output, time_limit, memory_limit, checker, callback ):
+    def test( self, *, binary, run, test, answer, input, output, time_limit, memory_limit, checker, checker_run, callback ):
         def query( files ):
             id = ('id_%08d' % self.__message_id).encode('ascii')
             self.__message_id += 1
@@ -91,7 +91,7 @@ class Judge:
                     ('%s\\%s>%d' % (f.hash, f.name, f.time)).encode('utf-8')
             self.__response[id] = self.__tested(callback)
             mcn = os.path.splitext(binary.name)[0]
-            self.__socket.send(Packet({
+            data = {
                 b'ID': id,
                 b'Command': b'test',
                 b'Source': mcn.encode('utf-8'),
@@ -103,7 +103,12 @@ class Judge:
                 b'TimeLimit': ('%d' % int(1000 * time_limit)).encode('utf-8'),
                 b'MemoryLimit': ('%d' % memory_limit).encode('utf-8'),
                 b'CheckerPath': path(checker)
-            })())
+            }
+            if run is not None:
+                data[b'RunString'] = run.encode('utf-8')
+            if checker_run is not None:
+                data[b'CheckerRun'] = checker_run.encode('utf-8')
+            self.__socket.send(Packet(data)())
         self.__query = query
         query(set())
 

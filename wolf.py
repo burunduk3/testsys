@@ -170,7 +170,7 @@ def action_compiler_info( id ):
 def action_compiler_list():
     return wolf.compiler_list()
 def action_compiler_modify( id, binary, compile, run ):
-    if not (isinstance(id, int) and isinstance(binary, str) and isinstance(compile, str) and isinstance(run, str)):
+    if not (isinstance(id, str) and isinstance(binary, str) and isinstance(compile, str) and isinstance(run, str)):
         return False
     if wolf.compiler_get(id) is None:
         return False
@@ -378,6 +378,10 @@ def action_checker_compile( id ):
     if compiler is None:
         # todo: add actions into list of bad compilers
         return problem_add("compiler %s doesn't exist, needed for checker in problem #%d" % (checker.compiler, id))
+    if compiler.binary is None and compiler.compiler is None:
+        # interpretator, no need for compile
+        checker.binary = checker.source
+        return
     judge = judge_get()
     if judge is None:
         judge_queue.push((action_checker_compile, (id,)))
@@ -410,6 +414,10 @@ def action_submit_compile( id ):
     compiler = wolf.compiler_get(submit.compiler)
     if compiler is None:
         return problem_add("failed to compile submit #%d: compiler not exists: %s" % (id, submit.compiler))
+    if compiler.binary is None and compiler.compiler is None:
+        # interpretator, no need for compile
+        submit.binary = submit.source
+        return
     judge = judge_get()
     if judge is None:
         judge_queue.push((action_submit_compile, (id,)))
@@ -437,30 +445,52 @@ def action_submit_test( id, test_no ):
     if submit.result is not None or submit.tests[test_no].status is not None:
         return
     assert 0 <= test_no < len(submit.tests)
+    problem = wolf.problem_get(submit.problem)
+    checker = problem.checker
+    checker_binary = wolf.content_get(checker.binary)
+    submit_compiler = wolf.compiler_get(submit.compiler)
+    checker_compiler = wolf.compiler_get(checker.compiler)
+    if submit_compiler is None:
+        return problem_add("failed to compile submit #%d: compiler not exists: %s" % (id, submit.compiler))
+    if checker_compiler is None:
+        return problem_add("failed to compile submit #%d: compiler not exists: %s" % (id, checker.compiler))
     judge = judge_get()
     if judge is None:
         judge_queue.push((action_submit_test, (id, test_no)))
         return
+    if submit_compiler.run is not None and submit_compiler.run == "$binary":
+        log("WARNING: compiler %s has deprecated run string" % submit.compiler)
+    if checker_compiler.run is not None and checker_compiler.run == "$binary":
+        log("WARNING: compiler %s has deprecated run string" % checker.compiler)
     test = submit.tests[test_no]
+    source_binary = wolf.content_get(source.binary)
     binary = wolf.content_get(submit.binary)
+    if submit_compiler.run is None or submit_compiler.run == "$binary":
+        submit_run = magic_parse(submit_compiler.run, {'name': submit_source.name, 'binary': submit_binary.name})
+    else:
+        submit_run = None
+    if checker_compiler.run is None or checker_compiler.run == "$binary":
+        checker_run = magic_parse(checker_compiler.run, {'name': checker_source.name, 'binary': checker_binary.name})
+    else:
+        checker_run = None
     data_test = wolf.content_get(test.test)
     data_answer = wolf.content_get(test.answer)
-    problem = wolf.problem_get(submit.problem)
-    checker = wolf.content_get(problem.checker.binary)
     def callback( status, maxtime, maxmemory):
         log("submit #%d result on test #%d: %s" % (id, test_no, Judge.status_str[status]))
         data.create('submit.test', [id, test_no, Judge.status_str[status], maxtime, maxmemory])
         return []
     # todo: use compiler 'run' command
     judge.test(
-        binary=binary,
-        test=data_test,
-        answer=data_answer,
+        binary = submit_binary,
+        binary_run = binary_run,
+        test = data_test,
+        answer = data_answer,
         input = problem.input,
         output = problem.output,
-        time_limit=problem.time_limit,
-        memory_limit=problem.memory_limit,
-        checker=checker,
+        time_limit = problem.time_limit,
+        memory_limit = problem.memory_limit,
+        checker = checker,
+        checker_run = checker_run,
         callback = callback
     )
 
