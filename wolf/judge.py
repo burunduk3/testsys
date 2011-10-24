@@ -54,9 +54,8 @@ class Judge:
     def __tested( self, callback ):
         return self.__normal(callback, [
             (b'MaxTime', '0', lambda x: 1e-7 * int(x)), # testsys judge returns time in 1/10⁷ seconds
-            (b'MaxMemory', '0', lambda x: int(x))
-            # todo: use additional parameters
-            #   UlitityOutput (output of checker)
+            (b'MaxMemory', '0', lambda x: int(x)),
+            (b'UtilityOutput', b'', None)
         ])
 
     def receive( self, packet ):

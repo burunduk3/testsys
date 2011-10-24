@@ -242,7 +242,7 @@ class Wolf:
     def team_get( self, login ):
         return self.__teams.get(login)
 
-    def force_submit_test( id ):
+    def force_submit_test( self, id ):
         if self.__submits[id].binary is not False:
             for test in self.__submits[id].testings:
                 self.__shedulers['solution_test'](id, test)

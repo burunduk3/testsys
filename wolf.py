@@ -421,6 +421,7 @@ def action_submit_compile( id ):
         # interpretator, no need for compile
         submit.binary = submit.source
         submit.compiler_output = None
+        wolf.force_submit_test(id)
         return
     judge = judge_get()
     if judge is None:
@@ -481,8 +482,10 @@ def action_submit_test( id, test_no ):
         checker_run = magic_parse(checker_compiler.run, {'name': checker_source.name, 'binary': checker_binary.name})
     data_test = wolf.content_get(test.test)
     data_answer = wolf.content_get(test.answer)
-    def callback( status, maxtime, maxmemory):
+    def callback( status, maxtime, maxmemory, output ):
         log("submit #%d result on test #%d: %s" % (id, test_no, Judge.status_str[status]))
+        if len(output) > 0:
+            log(output.decode('ibm8859-1'))
         data.create('submit.test', [id, test_no, Judge.status_str[status], maxtime, maxmemory])
         return []
     # todo: use compiler 'run' command
