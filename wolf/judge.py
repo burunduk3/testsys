@@ -107,15 +107,6 @@ class Judge:
                 data[b'RunString'] = run.encode('utf-8')
             if checker_run is not None:
                 data[b'CheckerRun'] = checker_run.encode('utf-8')
-            log("data to be sent to judge:")
-            for key in sorted(data.keys()):
-                if isinstance(data[key], bytes):
-                    value = data[key].decode('iso8859-1')
-                else:
-                    value = str(data[key])
-                if len(value) > 20:
-                    value = value[0:18] + '...'
-                log("  %s: %s" % (key.decode('iso8859-1'), value))
             self.__socket.send(Packet(data)())
         self.__query = query
         query(set())

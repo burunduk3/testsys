@@ -485,7 +485,7 @@ def action_submit_test( id, test_no ):
     def callback( status, maxtime, maxmemory, output ):
         log("submit #%d result on test #%d: %s" % (id, test_no, Judge.status_str[status]))
         if len(output) > 0:
-            log(output.decode('ibm8859-1'))
+            log(output.decode('iso8859-1'))
         data.create('submit.test', [id, test_no, Judge.status_str[status], maxtime, maxmemory])
         return []
     # todo: use compiler 'run' command
