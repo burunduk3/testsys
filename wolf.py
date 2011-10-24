@@ -169,6 +169,13 @@ def action_compiler_info( id ):
     return {'id': compiler.id, 'binary': compiler.binary, 'compile': compiler.compile, 'run': compiler.run} if compiler is not None else False
 def action_compiler_list():
     return wolf.compiler_list()
+def action_compiler_modify( id, binary, compile, run ):
+    if not (isinstance(id, int) and isinstance(binary, str) and isinstance(compile, str) and isinstance(run, str)):
+        return False
+    if wolf.compiler_get(id) is None:
+        return False
+    data.create("compiler.modify", [id, binary, compile, run])
+    return True
 def action_compiler_remove( id ):
     if wolf.compiler_get(id) is None:
         return False
@@ -321,6 +328,7 @@ net_actions = {
     'compiler.add': action_create(['id', 'binary', 'compile', 'run'], action_compiler_add),
     'compiler.info': action_create(['id'], action_compiler_info),
     'compiler.list': action_create([], action_compiler_list),
+    'compiler.modify': action_create(['id', 'binary', 'compile', 'run'], action_compiler_modify),
     'compiler.remove': action_create(['id'], action_compiler_remove),
     # 'problem.checker.default':
     'problem.checker.recompile': action_create(["id"], action_problem_checker_recompile),

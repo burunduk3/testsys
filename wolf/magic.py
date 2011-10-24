@@ -43,12 +43,15 @@ def magic_parse( s, v ):
             return mp_cutend
         else:
             return mp_modify
+    def mp_skipcut( x ):
+        return mp_modify(x) if x in {'}', '%', '#'} else mp_skipcut
     def mp_cutend( x ):
         nonlocal variable, cutting
-        if x in {'}', '%', '#'}:
+        if x in {'}', '%', '#', '|'}:
             if variable.endswith(cutting):
                 variable = variable[:-len(cutting)]
-            return mp_modify(x)
+                return mp_skipcut(x)
+            return mp_modify(x if x != '|' else '%')
         else:
             cutting += x
             return mp_cutend

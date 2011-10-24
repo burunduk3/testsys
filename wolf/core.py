@@ -105,6 +105,7 @@ class Wolf:
             # 'archive.remove': self.replay_archive_remove,
             'archive.submit': self.replay_archive_submit,
             'compiler.add': self.replay_compiler_add,
+            'compiler.modify': self.replay_compiler_modify,
             'compiler.remove': self.replay_compiler_remove,
             'content': self.replay_content,
             'problem.checker.compiled': self.replay_problem_checker_compiled,
@@ -146,6 +147,11 @@ class Wolf:
         self.__shedulers['solution_compile'](int(id))
     def replay_compiler_add( self, timestamp, parameters ):
         id, binary, compile, run = parameters
+        assert id not in self.__compilers
+        self.__compilers[id] = Compiler(id, binary, compile, run)
+    def replay_compiler_modify( self, timestamp, parameters ):
+        id, binary, compile, run = parameters
+        assert id in self.__compilers
         self.__compilers[id] = Compiler(id, binary, compile, run)
     def replay_compiler_remove( self, timestamp, parameters ):
         id = parameters[0]
