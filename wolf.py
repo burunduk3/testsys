@@ -280,7 +280,10 @@ def action_submit_report( id ):
         return False
     if submit.binary is None:
         return False
-    compiler_output = wolf.content_get(submit.compiler_output).load()
+    if submit.compiler_output is not None:
+        compiler_output = wolf.content_get(submit.compiler_output).load()
+    else:
+        compiler_output = b''
     return {'compiler_output': base64.b64encode(compiler_output).decode('ascii')}
 def action_submit_source( id ):
     if isinstance(id, list):
@@ -378,7 +381,7 @@ def action_checker_compile( id ):
     if compiler is None:
         # todo: add actions into list of bad compilers
         return problem_add("compiler %s doesn't exist, needed for checker in problem #%d" % (checker.compiler, id))
-    if compiler.binary is None and compiler.compiler is None:
+    if compiler.binary is None and compiler.compile is None:
         # interpretator, no need for compile
         checker.binary = checker.source
         return
@@ -414,9 +417,10 @@ def action_submit_compile( id ):
     compiler = wolf.compiler_get(submit.compiler)
     if compiler is None:
         return problem_add("failed to compile submit #%d: compiler not exists: %s" % (id, submit.compiler))
-    if compiler.binary is None and compiler.compiler is None:
+    if compiler.binary is None and compiler.compile is None:
         # interpretator, no need for compile
         submit.binary = submit.source
+        submit.compiler_output = None
         return
     judge = judge_get()
     if judge is None:
@@ -463,16 +467,18 @@ def action_submit_test( id, test_no ):
     if checker_compiler.run is not None and checker_compiler.run == "$binary":
         log("WARNING: compiler %s has deprecated run string" % checker.compiler)
     test = submit.tests[test_no]
-    source_binary = wolf.content_get(source.binary)
+    submit_binary = wolf.content_get(submit.binary)
+    submit_source = wolf.content_get(submit.source)
+    checker_source = wolf.content_get(checker.source)
     binary = wolf.content_get(submit.binary)
     if submit_compiler.run is None or submit_compiler.run == "$binary":
-        submit_run = magic_parse(submit_compiler.run, {'name': submit_source.name, 'binary': submit_binary.name})
-    else:
         submit_run = None
-    if checker_compiler.run is None or checker_compiler.run == "$binary":
-        checker_run = magic_parse(checker_compiler.run, {'name': checker_source.name, 'binary': checker_binary.name})
     else:
+        submit_run = magic_parse(submit_compiler.run, {'name': submit_source.name, 'binary': submit_binary.name})
+    if checker_compiler.run is None or checker_compiler.run == "$binary":
         checker_run = None
+    else:
+        checker_run = magic_parse(checker_compiler.run, {'name': checker_source.name, 'binary': checker_binary.name})
     data_test = wolf.content_get(test.test)
     data_answer = wolf.content_get(test.answer)
     def callback( status, maxtime, maxmemory):
@@ -482,14 +488,14 @@ def action_submit_test( id, test_no ):
     # todo: use compiler 'run' command
     judge.test(
         binary = submit_binary,
-        binary_run = binary_run,
+        run = submit_run,
         test = data_test,
         answer = data_answer,
         input = problem.input,
         output = problem.output,
         time_limit = problem.time_limit,
         memory_limit = problem.memory_limit,
-        checker = checker,
+        checker = checker_binary,
         checker_run = checker_run,
         callback = callback
     )
