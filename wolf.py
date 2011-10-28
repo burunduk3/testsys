@@ -13,7 +13,7 @@ log.write(" === ARCTIC WOLF ===")
 
 parser = argparse.ArgumentParser(description="Arctic Wolf: contest management system.")
 parser.add_argument('--port', '-p', action='store', dest='port', required=True, help='Default port to listen.')
-parser.add_argument('--judge-port', action='store', dest='judge_port', default=17239, help='Port to listen connections from judges.')
+parser.add_argument('--judge-port', action='store', dest='judge_port', default=17239, help='Port to listen connections from judges (default: 17239).')
 parser.add_argument('-u', action='store', dest='unix', help='Unix socket for command console (not used by default).')
 parser.add_argument('data', metavar='<data>', help='Prefix for data files.')
 args = parser.parse_args()
@@ -39,7 +39,7 @@ def cb_unix( peer, socket, init ):
             log.info("abnormal disconnecting unix peer #%d" % id)
             socket.disconnect
             return []
-        log.debug("received from unix#%d: %s" % (id, repr(data)))
+        # log.debug("received from unix#%d: %s" % (id, repr(data)))
         data = data.split(b'\n')
         tail += data[0]
         for x in data[1:]:
