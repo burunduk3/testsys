@@ -18,10 +18,39 @@ parser.add_argument('-u', action='store', dest='unix', help='Unix socket for com
 parser.add_argument('data', metavar='<data>', help='Prefix for data files.')
 args = parser.parse_args()
 
-def cb_unix( socket, peer ):
-    log("new unix connection (handle = %d, remote = %s)" % (socket.fileno(), str(peer)))
-    socket.close()
-    return []
+unix_id = 0
+
+def cb_unix( peer, socket, init ):
+    global unix_id
+    id = unix_id
+    unix_id += 1
+    log.info("new unix connection, name it #%d" % id)
+    def handle_command( command ):
+        arguments = command[1:]
+        command = command[0]
+        if command == 'help':
+            socket.send(b'no help availible\n')
+        else:
+            socket.send(('unknown command: %s\n' % command).encode('utf8'))
+    tail = b''
+    def cb_data( data ):
+        nonlocal tail
+        if len(data) == 0:
+            log.info("abnormal disconnecting unix peer #%d" % id)
+            socket.disconnect
+            return []
+        log.debug("received from unix#%d: %s" % (id, repr(data)))
+        data = data.split(b'\n')
+        tail += data[0]
+        for x in data[1:]:
+            handle_command(tail.decode('utf8').split())
+            tail = x
+        return []
+    def cb_halt():
+        log.info("disconnect unix: %s" % str(peer))
+        socket.disconnect()
+        return []
+    return init(cb_data, cb_halt)
 
 def cb_main( peer, socket, init ):
     global net_actions
@@ -322,14 +351,19 @@ def action_team_add( login, name, password ):
         return False
     data.create("team.add", [login, name, password])
     return True
-def action_team_login( login, password ):
-    team = wolf.team_get(login)
-    return team is not None and team.login == login and team.password == password
 def action_team_info( login ):
     if isinstance(login, list):
         return [action_team_info(x) for x in login]
     team = wolf.team_get(login)
     return {'login': team.login, 'name': team.name} if team is not None else False
+def action_team_login( login, password ):
+    team = wolf.team_get(login)
+    return team is not None and team.login == login and team.password == password
+def action_team_modify( login, name, password ):
+    if not isinstance(login, str) or not isinstance(name, str) or not isinstance(password, str) or wolf.team_get(login) is None:
+        return False
+    data.create('team.modify', [login, name, password])
+    return True
 
 net_actions = {
     'ping': lambda data: True,
@@ -355,6 +389,7 @@ net_actions = {
     'problem.info': action_create(['id'], action_problem_info),
     'problem.files.set': action_create(['id', 'input', 'output'], action_problem_files_set),
     'problem.limits.set': action_create(['id', 'time', 'memory'], action_problem_limits_set),
+    'problem.modify': action_create(['id', 'name', 'full'], action_problem_modify),
     'problem.test.add': action_create(['id', 'test', 'answer'], action_problem_test_add),
     'problem.test.count': action_create(['id'], action_problem_test_count),
     #'problem.test.insert':
@@ -366,7 +401,8 @@ net_actions = {
     # removed: 'submit.status': action_create(['id'], action_submit_status),
     'team.add': action_create(['login', 'name', 'password'], action_team_add),
     'team.info': action_create(['login'], action_team_info),
-    'team.login': action_create(['login', 'password'], action_team_login)
+    'team.login': action_create(['login', 'password'], action_team_login),
+    'team.modify': action_create(['login', 'name', 'password'], action_team_modify)
 }
 
 def problem_add( message ):

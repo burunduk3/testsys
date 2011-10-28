@@ -102,7 +102,7 @@ class Wolf:
             'archive.add': self.replay_archive_add,
             'archive.compiler.add': self.replay_archive_compiler_add,
             'archive.compiler.remove': self.replay_archive_compiler_remove,
-            # 'archive.remove': self.replay_archive_remove,
+            'archive.remove': self.replay_archive_remove,
             'archive.submit': self.replay_archive_submit,
             'compiler.add': self.replay_compiler_add,
             'compiler.modify': self.replay_compiler_modify,
@@ -119,7 +119,8 @@ class Wolf:
             'submit': self.replay_submit,
             'submit.compiled': self.replay_submit_compiled,
             'submit.test': self.replay_submit_test,
-            'team.add': self.replay_team_add
+            'team.add': self.replay_team_add,
+            'team.modify': self.replay_team_modify
         }
 
     def replay_archive_add( self, timestamp, parameters ):
@@ -235,6 +236,11 @@ class Wolf:
             self.__shedulers['solution_test'](id, test)
     def replay_team_add( self, timestamp, parameters ):
         login, name, password = parameters
+        assert login not in self.__teams
+        self.__teams[login] = Team(login, name, password)
+    def replay_team_modify( self, timestamp, parameters ):
+        login, name, password = parameters
+        assert login in self.__teams
         self.__teams[login] = Team(login, name, password)
 
     def archive_get( self ):

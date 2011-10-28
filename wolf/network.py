@@ -7,7 +7,7 @@ class Socket:
         self.send = handle.send
 
 def handle_socket( handle, events, callbacks ):
-    for x in [select.EPOLLIN, select.EPOLLOUT, select.EPOLLERR]:
+    for x in [select.EPOLLIN, select.EPOLLOUT, select.EPOLLERR, select.EPOLLHUP]:
         if events & x == 0: continue
         events &= ~x
         if x in callbacks:
@@ -22,12 +22,13 @@ class Poll:
         self.__poll = select.epoll()
         self.__actions = {}
 
-    def __add( self, socket, action ):
+    def __add( self, socket, action, halt=None ):
         socket_handle = socket.fileno()
         def handle( handle, events ):
             assert handle == socket_handle
             return handle_socket(handle, events, {
-                select.EPOLLIN: action
+                select.EPOLLIN: action,
+                select.EPOLLHUP: halt
                 # todo: use cb_halt for handing EPOLLHUP and EPOLLERR
             })
         self.__actions[socket_handle] = handle
@@ -55,7 +56,7 @@ class Poll:
             wrapper = Socket(handle)
             def init( cb_data, cb_halt ):
                 wrapper.disconnect = lambda: self.__disconnect(handle)
-                self.__add(handle, lambda: self.__receive(handle, cb_data, cb_halt))
+                self.__add(handle, lambda: self.__receive(handle, cb_data, cb_halt), cb_halt)
                 return []
             return [(callback, (peer, wrapper, init))]
         return self.__add(socket, action)
