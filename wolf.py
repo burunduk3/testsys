@@ -125,6 +125,11 @@ def action_archive_count():
     return len(wolf.archive_get().problem_list)
 def action_archive_list( start, limit ):
     return wolf.archive_get().problem_list[start:start + limit]
+def action_archive_remove( id ):
+    if not isinstance(id, int) or not 0 <= id < len(wolf.archive_get().problem_list):
+        return False
+    data.create("archive.remove", [id])
+    return True
 def action_archive_submit( team, problem, name, source, compiler ):
     archive = wolf.archive_get()
     if wolf.problem_get(problem) is None or wolf.compiler_get(compiler) is None or wolf.team_get(team) is None or \
@@ -170,7 +175,7 @@ def action_compiler_info( id ):
 def action_compiler_list():
     return wolf.compiler_list()
 def action_compiler_modify( id, binary, compile, run ):
-    if not (isinstance(id, str) and isinstance(binary, str) and isinstance(compile, str) and isinstance(run, str)):
+    if not (isinstance(id, str) and (isinstance(binary, str) or binary is None) and (isinstance(compile, str) or compile is None) and (isinstance(run, str) or run is None)):
         return False
     if wolf.compiler_get(id) is None:
         return False
@@ -231,6 +236,14 @@ def action_problem_limits_set( id, time, memory ):
     if id < 0 or id >= wolf.problem_count():
         return False
     data.create("problem.limits.set", [id, time, memory])
+    return True
+def action_problem_modify( id, name, full ):
+    if not isinstance(id, int) or not isinstance(name, str) or not isinstance(full, str):
+        return False
+    problem = wolf.problem_get(id)
+    if problem is None:
+        return False
+    data.create("problem.modify", [id, name, full])
     return True
 def action_problem_test_add( id, test, answer ):
     if id < 0 or id >= wolf.problem_count():
@@ -326,6 +339,7 @@ net_actions = {
     'archive.compiler.remove': action_create(['id'], action_archive_compiler_remove),
     'archive.count': action_create([], action_archive_count),
     'archive.list': action_create(['start', 'limit'], action_archive_list),
+    'archive.remove': action_create(['id'], action_archive_remove),
     'archive.submit': action_create(['team', 'problem', 'name', 'source', 'compiler'], action_archive_submit),
     'archive.submits': action_create(['team', 'problem', 'start', 'limit'], action_archive_submits, default=True),
     'compiler.add': action_create(['id', 'binary', 'compile', 'run'], action_compiler_add),
@@ -355,7 +369,7 @@ net_actions = {
     'team.login': action_create(['login', 'password'], action_team_login)
 }
 
-def problem_add( judge, message ):
+def problem_add( message ):
     log("ERROR: %s" % message)
     problems.push(message)
 

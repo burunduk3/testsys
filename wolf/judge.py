@@ -3,14 +3,14 @@ from .common import log
 from dts.protocol import Packet
 
 class Judge:
-    OK, CE, WA, RE, TL, ML, FAIL = range(7)
-    status_str = ["OK", "CE", "WA", "RE", "TL", "ML", "Fail"]
+    OK, CE, WA, PE, RE, TL, ML, FAIL = range(8)
+    status_str = ["OK", "CE", "WA", "PE", "RT", "TL", "ML", "Fail"]
 
     def __init__( self, socket, callback_ready ):
         self.__socket, self.__ready = socket, callback_ready
         self.__message_id = 0
         self.__response = {None: self.__authorize}
-        self.__status = {Judge.status_str[x]: x for x in [Judge.OK, Judge.CE, Judge.WA, Judge.RE, Judge.TL, Judge.ML, Judge.FAIL]}
+        self.__status = {Judge.status_str[x]: x for x in [Judge.OK, Judge.CE, Judge.WA, Judge.PE, Judge.RE, Judge.TL, Judge.ML, Judge.FAIL]}
     def name( self ):
         return self.__name
 

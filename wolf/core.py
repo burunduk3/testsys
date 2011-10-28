@@ -114,6 +114,7 @@ class Wolf:
             'problem.create': self.replay_problem_create,
             'problem.files.set': self.replay_problem_files_set,
             'problem.limits.set': self.replay_problem_limits_set,
+            'problem.modify': self.replay_problem_modify,
             'problem.test.add': self.replay_problem_test_add,
             'submit': self.replay_submit,
             'submit.compiled': self.replay_submit_compiled,
@@ -145,6 +146,13 @@ class Wolf:
         submit.origin = (None, team)
         self.__submits.append(submit)
         self.__shedulers['solution_compile'](int(id))
+    def replay_archive_remove( self, timestamp, parameters ):
+        local_id = int(*parameters)
+        assert 0 <= local_id < len(self.__archive.problem_list)
+        # todo: optimize using treap
+        problem_id = self.__archive.problem_list[local_id]
+        del self.__archive.problem_list[local_id]
+        self.__archive.problems.remove(problem_id)
     def replay_compiler_add( self, timestamp, parameters ):
         id, binary, compile, run = parameters
         assert id not in self.__compilers
@@ -189,6 +197,12 @@ class Wolf:
         id, time, memory = int(id), float(time), int(memory)
         self.__problems[id].time_limit = time
         self.__problems[id].memory_limit = memory
+    def replay_problem_modify( self, timestamp, parameter ):
+        id, name, full = parameters
+        id = int(id)
+        assert 0 <= id < len(self.__problems)
+        self.__problems[id].name = name
+        self.__problems[id].full = full
     def replay_problem_test_add( self, timestamp, parameters ):
         id, test, answer = parameters
         id = int(id)
