@@ -37,7 +37,7 @@ def cb_unix( peer, socket, init ):
         nonlocal tail
         if len(data) == 0:
             log.info("abnormal disconnecting unix peer #%d" % id)
-            socket.disconnect
+            socket.disconnect()
             return []
         # log.debug("received from unix#%d: %s" % (id, repr(data)))
         data = data.split(b'\n')
@@ -47,7 +47,7 @@ def cb_unix( peer, socket, init ):
             tail = x
         return []
     def cb_halt():
-        log.info("disconnect unix: %s" % str(peer))
+        log.info("disconnect unix #%d" % id)
         socket.disconnect()
         return []
     return init(cb_data, cb_halt)
@@ -119,13 +119,12 @@ s.listen(100)
 poll.add_listener(s, cb_judge)
 
 
-def action_create( parameters, continuation, default = False ):
+def action_create( parameters, continuation, defaults = {} ):
     def action( data ):
-        if not default:
-            for x in parameters:
-                if x not in data:
-                   return False
-        return continuation(*[data.get(x, None) for x in parameters])
+        for x in parameters:
+            if x not in data and x not in defaults:
+                return False
+        return continuation(*[data.get(x, defaults.get(x)) for x in parameters])
     return action
 
 def action_archive_add( problem ):
@@ -326,6 +325,8 @@ def action_submit_report( id ):
         compiler_output = wolf.content_get(submit.compiler_output).load()
     else:
         compiler_output = b''
+    if len(compiler_output) > 2048:
+        compiler_output = compiler_output[:2000] + b'...(truncated)\n'
     return {'compiler_output': base64.b64encode(compiler_output).decode('ascii')}
 def action_submit_source( id ):
     if isinstance(id, list):
@@ -360,8 +361,10 @@ def action_team_login( login, password ):
     team = wolf.team_get(login)
     return team is not None and team.login == login and team.password == password
 def action_team_modify( login, name, password ):
-    if not isinstance(login, str) or not isinstance(name, str) or not isinstance(password, str) or wolf.team_get(login) is None:
+    if not isinstance(login, str) or not isinstance(name, str) or not (isinstance(password, str) or password is None) or wolf.team_get(login) is None:
         return False
+    if password is None:
+        password = wolf.team_get(login).password
     data.create('team.modify', [login, name, password])
     return True
 
@@ -375,7 +378,7 @@ net_actions = {
     'archive.list': action_create(['start', 'limit'], action_archive_list),
     'archive.remove': action_create(['id'], action_archive_remove),
     'archive.submit': action_create(['team', 'problem', 'name', 'source', 'compiler'], action_archive_submit),
-    'archive.submits': action_create(['team', 'problem', 'start', 'limit'], action_archive_submits, default=True),
+    'archive.submits': action_create(['team', 'problem', 'start', 'limit'], action_archive_submits, defaults = {'team': None, 'problem': None}),
     'compiler.add': action_create(['id', 'binary', 'compile', 'run'], action_compiler_add),
     'compiler.info': action_create(['id'], action_compiler_info),
     'compiler.list': action_create([], action_compiler_list),
@@ -402,7 +405,7 @@ net_actions = {
     'team.add': action_create(['login', 'name', 'password'], action_team_add),
     'team.info': action_create(['login'], action_team_info),
     'team.login': action_create(['login', 'password'], action_team_login),
-    'team.modify': action_create(['login', 'name', 'password'], action_team_modify)
+    'team.modify': action_create(['login', 'name', 'password'], action_team_modify, defaults = {'password': None})
 }
 
 def problem_add( message ):

@@ -198,7 +198,7 @@ class Wolf:
         id, time, memory = int(id), float(time), int(memory)
         self.__problems[id].time_limit = time
         self.__problems[id].memory_limit = memory
-    def replay_problem_modify( self, timestamp, parameter ):
+    def replay_problem_modify( self, timestamp, parameters ):
         id, name, full = parameters
         id = int(id)
         assert 0 <= id < len(self.__problems)
