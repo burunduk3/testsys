@@ -187,7 +187,7 @@ attributes[6][termios.VMIN] = 0
 termios.tcsetattr(fd, termios.TCSADRAIN, attributes)
 
 console = Console(tab, console_command)
-console.lock('*** connecting to testsys ***', "id_pre2")
+console.lock('*** connecting to testsys ***', "id_pre0")
 command_id = 0
 reconnect_id = 0
 
@@ -206,8 +206,10 @@ poll.register(s, select.EPOLLIN)
 s.connect((host, port))
 s.send(Packet({'Password': key, 'Command': "ver", 'ID': "id_pre0"})())
 if args.msglevel is not None:
+    console.value = "id_pre1"
     s.send(Packet({'Command': "msg_level " + args.msglevel, 'ID': "id_pre1"})())
 if args.name is not None:
+    console.value = "id_pre2"
     s.send(Packet({'Command': "name " + args.name, 'ID': "id_pre2"})())
 
 def reconnect():
@@ -298,6 +300,10 @@ while True:
     except IOError as e:
         console.write("\033[31;1mERROR: " + str(e) + "\033[0m\n")
         queue.append((reconnect, ()))
+    except KeyboardInterrupt:
+        console.lock("terminated by KeyboardInterrupt", "never")
+        print("");
+        break
     for f, p in queue:
         # console.write("[debug] next action\n")
         if isinstance(p, tuple):
