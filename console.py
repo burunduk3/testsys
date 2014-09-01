@@ -201,16 +201,22 @@ port = int(port)
 poll = select.epoll()
 poll.register(sys.stdin, select.EPOLLIN)
 
-s = socket.socket()
-poll.register(s, select.EPOLLIN)
-s.connect((host, port))
-s.send(Packet({'Password': key, 'Command': "ver", 'ID': "id_pre0"})())
-if args.msglevel is not None:
-    console.value = "id_pre1"
-    s.send(Packet({'Command': "msg_level " + args.msglevel, 'ID': "id_pre1"})())
-if args.name is not None:
-    console.value = "id_pre2"
-    s.send(Packet({'Command': "name " + args.name, 'ID': "id_pre2"})())
+try:
+    s = socket.socket()
+    poll.register(s, select.EPOLLIN)
+    s.connect((host, port))
+    s.send(Packet({'Password': key, 'Command': "ver", 'ID': "id_pre0"})())
+    if args.msglevel is not None:
+        console.value = "id_pre1"
+        s.send(Packet({'Command': "msg_level " + args.msglevel, 'ID': "id_pre1"})())
+    if args.name is not None:
+        console.value = "id_pre2"
+        s.send(Packet({'Command': "name " + args.name, 'ID': "id_pre2"})())
+except KeyboardInterrupt:
+    console.lock("terminated by KeyboardInterrupt", "never")
+    print("");
+    termios.tcsetattr(fd, termios.TCSADRAIN, tty_attr_old)
+    sys.exit(1)
 
 def reconnect():
     global reconnect_id, s
