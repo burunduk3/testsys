@@ -42,10 +42,14 @@ class Console:
         self.state = Console.LOCK
         self.__message = message
         print('\r\033[K' + self.__message, end='')
-    def unlock( self, message ):
-        self.state = Console.WAIT
+    def unlock( self, message, wait=True ):
+        self.state = Console.WAIT if wait else Console.NORMAL
         self.__message = message
         print('\r\033[K' + self.__message, end='')
+        if not wait:
+            self.write(self.__buffer)
+            self.__buffer = ''
+            self.redraw ()
 
     def write( self, text, force = False ):
         if len(text) != 0 and text[-1] != '\n':
@@ -175,6 +179,7 @@ def command( line ):
 parser = argparse.ArgumentParser(description="Text console for testsys.")
 parser.add_argument('--password-file', '-p', action='store', dest='key_file', required=True)
 parser.add_argument('--name', '-n', action='store', dest='name', help='Displayed name.')
+parser.add_argument('--contest', '-c', action='store', dest='contest', help='Select contest.')
 parser.add_argument('--msglevel', '-m', action='store', dest='msglevel', help='Initial testsys verbosity level.')
 parser.add_argument('server', metavar='<host>:<port>', help='Address of testsys server.')
 args = parser.parse_args()
@@ -212,6 +217,9 @@ try:
     if args.name is not None:
         console.value = "id_pre2"
         s.send(Packet({'Command': "name " + args.name, 'ID': "id_pre2"})())
+    if args.contest is not None:
+        console.value = "id_pre3"
+        s.send (Packet ({'Command': "select_contest " + args.contest, 'ID': "id_pre3"})())
 except KeyboardInterrupt:
     console.lock("terminated by KeyboardInterrupt", "never")
     print("");
@@ -219,7 +227,8 @@ except KeyboardInterrupt:
     sys.exit(1)
 
 def reconnect():
-    global reconnect_id, s
+    global reconnect_id, is_reconnect, s
+    is_reconnect = True
     packet_id = "reconnect%d" % reconnect_id
     console.lock("*** reconnecting ***", packet_id + "_2")
     reconnect_id += 1
@@ -238,6 +247,8 @@ def reconnect():
             s.send(Packet({'Command': "msg_level " + args.msglevel, 'ID': packet_id + "_1"})())
         if args.name is not None:
             s.send(Packet({'Command': "name " + args.name, 'ID': packet_id + "_2"})())
+        if args.contest is not None:
+            s.send(Packet({'Command': "select_contest " + args.contest, 'ID': packet_id + "_3"})())
     except IOError as e:
         console.write("\033[31;1mexception while reconnecting: " + str(e) + "\033[0m\n")
         queue.append((reconnect, ()))
@@ -272,6 +283,7 @@ def handle_stdin( handle, events ):
         count = 4
 
 def handle_parser():
+    global is_reconnect
     for packet in parser():
         # console.write("[debug] work with packet %s\n" % str(packet))
         if 'Log' in packet:
@@ -287,9 +299,14 @@ def handle_parser():
             console.write('\033[1m' + packet['Chat'] + '\033[0m\n')
         if 'ID' in packet:
             if console.state is Console.LOCK and console.value == packet['ID']:
-                console.unlock('... press any key ...')
+                if is_reconnect:
+                    console.unlock ('', wait=False)
+                    is_reconnect = False
+                else:
+                    console.unlock('... press any key ...')
         # TODO: check for ignored keys
 
+is_reconnect = False
 action = {s.fileno() : handle_socket, sys.stdin.fileno(): handle_stdin}
 parser = PacketParser()
 count = 0
@@ -309,6 +326,9 @@ while True:
     except KeyboardInterrupt:
         console.lock("terminated by KeyboardInterrupt", "never")
         print("");
+        break
+    except Exception:
+        console.write("\033[31;1mERROR: " + str(e) + "\033[0m\n")
         break
     for f, p in queue:
         # console.write("[debug] next action\n")

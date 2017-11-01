@@ -6,5 +6,5 @@ case "`hostname`" in
 esac
 
 cd ~/code/testsys/
-exec ./console.py -p ~/.ssh/testsys-console.pwd --msglevel=4 --name=burunduk3 "$target"
+exec ./console.py -p ~/.ssh/testsys-console.pwd --msglevel=4 --name=burunduk3 "$@" "$target"
 
